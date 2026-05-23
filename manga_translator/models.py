@@ -10,6 +10,7 @@ from .model_manager import default_realesrgan_model_path, default_translation_mo
 
 
 class AppSettings(BaseModel):
+    translation_backend: str = "llama"
     translation_model_path: str = ""
     font_path: str = ""
     realesrgan_model_path: str = ""
@@ -42,6 +43,7 @@ class AppSettings(BaseModel):
     def with_env_defaults(
         cls,
         translation_model_path: str = "",
+        translation_backend: str = "",
         font_path: str = "",
         realesrgan_model_path: str = "",
         output_dir: str = "",
@@ -49,8 +51,10 @@ class AppSettings(BaseModel):
         llama_context: int | None = None,
         **kwargs: Any,
     ) -> "AppSettings":
+        resolved_backend = (translation_backend or get_config_value("TRANSLATION_BACKEND", "llama")).strip().lower()
         return cls(
-            translation_model_path=translation_model_path or get_config_value("TRANSLATION_MODEL_PATH") or str(default_translation_model_path()),
+            translation_backend=resolved_backend,
+            translation_model_path=translation_model_path or str(default_translation_model_path(resolved_backend)),
             font_path=font_path or get_config_value("FONT_PATH"),
             realesrgan_model_path=realesrgan_model_path or get_config_value("REALESRGAN_MODEL_PATH") or str(default_realesrgan_model_path()),
             output_dir=output_dir or get_config_value("OUTPUT_DIR", "outputs"),

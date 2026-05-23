@@ -1,1 +1,3 @@
 llama-cpp-python>=0.2.90
+ctranslate2>=4.4
+sentencepiece>=0.2

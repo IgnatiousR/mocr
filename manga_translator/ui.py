@@ -13,6 +13,7 @@ PIPELINE = MangaTranslationPipeline()
 
 
 def _settings(
+    translation_backend: str,
     model_path: str,
     font_path: str,
     realesrgan_model_path: str,
@@ -28,6 +29,7 @@ def _settings(
     enable_upscale: bool,
 ) -> AppSettings:
     return AppSettings.with_env_defaults(
+        translation_backend=translation_backend or "",
         translation_model_path=model_path or "",
         font_path=font_path or "",
         realesrgan_model_path=realesrgan_model_path or "",
@@ -51,6 +53,7 @@ def _file_path(file) -> str:
 def analyze(
     files,
     auto_translate: bool,
+    translation_backend: str,
     model_path: str,
     font_path: str,
     realesrgan_model_path: str,
@@ -68,6 +71,7 @@ def analyze(
     if not files:
         raise gr.Error("Upload at least one image.")
     settings = _settings(
+        translation_backend,
         model_path,
         font_path,
         realesrgan_model_path,
@@ -93,6 +97,7 @@ def compose(
     files,
     result_state,
     rows,
+    translation_backend: str,
     model_path: str,
     font_path: str,
     realesrgan_model_path: str,
@@ -110,6 +115,7 @@ def compose(
     if not files or not result_state:
         raise gr.Error("Analyze an image before composing.")
     settings = _settings(
+        translation_backend,
         model_path,
         font_path,
         realesrgan_model_path,
@@ -134,6 +140,7 @@ def compose(
 def batch_auto(
     files,
     auto_translate: bool,
+    translation_backend: str,
     model_path: str,
     font_path: str,
     realesrgan_model_path: str,
@@ -151,6 +158,7 @@ def batch_auto(
     if not files:
         raise gr.Error("Upload at least one image.")
     settings = _settings(
+        translation_backend,
         model_path,
         font_path,
         realesrgan_model_path,
@@ -180,37 +188,41 @@ def batch_auto(
     return zip_path, "\n".join(messages)
 
 
-def refresh_setup_status(model_path: str, font_path: str, realesrgan_model_path: str, output_dir: str) -> str:
+def refresh_setup_status(translation_backend: str, model_path: str, font_path: str, realesrgan_model_path: str, output_dir: str) -> str:
     settings = AppSettings.with_env_defaults(
+        translation_backend=translation_backend or "",
         translation_model_path=model_path or "",
         font_path=font_path or "",
         realesrgan_model_path=realesrgan_model_path or "",
         output_dir=output_dir or "",
     )
-
-
-def download_translation_from_ui(model_path: str, font_path: str, realesrgan_model_path: str, output_dir: str):
-    try:
-        path = download_translation_model()
-        status = f"Downloaded translation model: {path}"
-    except ModelDownloadError as exc:
-        status = f"Download failed: {exc}"
-    return str(AppSettings.with_env_defaults().translation_model_path), refresh_setup_status(model_path, font_path, realesrgan_model_path, output_dir), status
-
-
-def download_upscale_from_ui(model_path: str, font_path: str, realesrgan_model_path: str, output_dir: str):
-    try:
-        path = download_realesrgan_model()
-        status = f"Downloaded Real-ESRGAN model: {path}"
-    except ModelDownloadError as exc:
-        status = f"Download failed: {exc}"
-    return str(AppSettings.with_env_defaults().realesrgan_model_path), refresh_setup_status(model_path, font_path, realesrgan_model_path, output_dir), status
     return setup_status_markdown(
+        translation_backend=settings.translation_backend,
         translation_model_path=settings.translation_model_path,
         font_path=settings.font_path,
         realesrgan_model_path=settings.realesrgan_model_path,
         output_dir=settings.output_dir,
     )
+
+
+def download_translation_from_ui(translation_backend: str, model_path: str, font_path: str, realesrgan_model_path: str, output_dir: str):
+    downloaded_path = model_path
+    try:
+        path = download_translation_model(translation_backend)
+        downloaded_path = str(path)
+        status = f"Downloaded translation model: {path}"
+    except ModelDownloadError as exc:
+        status = f"Download failed: {exc}"
+    return downloaded_path, refresh_setup_status(translation_backend, downloaded_path, font_path, realesrgan_model_path, output_dir), status
+
+
+def download_upscale_from_ui(translation_backend: str, model_path: str, font_path: str, realesrgan_model_path: str, output_dir: str):
+    try:
+        path = download_realesrgan_model()
+        status = f"Downloaded Real-ESRGAN model: {path}"
+    except ModelDownloadError as exc:
+        status = f"Download failed: {exc}"
+    return str(AppSettings.with_env_defaults().realesrgan_model_path), refresh_setup_status(translation_backend, model_path, font_path, realesrgan_model_path, output_dir), status
 
 
 def build_app() -> gr.Blocks:
@@ -225,7 +237,8 @@ def build_app() -> gr.Blocks:
             )
             with gr.Column():
                 auto_translate = gr.Checkbox(label="Auto translate during analysis", value=True)
-                model_path = gr.Textbox(label="GGUF translation model path", placeholder="C:/models/gemma-translate-q4.gguf")
+                translation_backend = gr.Dropdown(["llama", "sugoi"], value="llama", label="translation backend")
+                model_path = gr.Textbox(label="Translation model path", placeholder="models/translation/gemma-translate-q4.gguf")
                 font_path = gr.Textbox(label="Font path", placeholder="C:/Windows/Fonts/arial.ttf")
                 realesrgan_model_path = gr.Textbox(label="Real-ESRGAN model path", placeholder="C:/models/RealESRGAN_x4plus_anime_6B.pth")
                 output_dir = gr.Textbox(label="Output directory", placeholder="outputs")
@@ -236,7 +249,7 @@ def build_app() -> gr.Blocks:
                 download_upscale_btn = gr.Button("Download Real-ESRGAN model")
 
         with gr.Accordion("Setup Status", open=False):
-            setup_status = gr.Markdown(refresh_setup_status("", "", "", ""))
+            setup_status = gr.Markdown(refresh_setup_status("", "", "", "", ""))
             refresh_status_btn = gr.Button("Refresh setup status")
 
         with gr.Accordion("CPU and rendering settings", open=False):
@@ -267,10 +280,14 @@ def build_app() -> gr.Blocks:
         )
 
         with gr.Tabs():
-            original = gr.Image(label="Original", type="filepath")
-            overlay = gr.Image(label="Detected boxes", type="filepath")
-            cleaned = gr.Image(label="Cleaned", type="filepath")
-            final = gr.Image(label="Final composite", type="filepath")
+            with gr.Tab("Original"):
+                original = gr.Image(label="Original", type="filepath")
+            with gr.Tab("Detected boxes"):
+                overlay = gr.Image(label="Detected boxes", type="filepath")
+            with gr.Tab("Cleaned"):
+                cleaned = gr.Image(label="Cleaned", type="filepath")
+            with gr.Tab("Final composite"):
+                final = gr.Image(label="Final composite", type="filepath")
 
         with gr.Row():
             final_file = gr.File(label="Final image")
@@ -293,33 +310,39 @@ def build_app() -> gr.Blocks:
         ]
         analyze_btn.click(
             analyze,
-            inputs=[files, auto_translate, *settings_inputs],
+            inputs=[files, auto_translate, translation_backend, *settings_inputs],
             outputs=[state, review, original, overlay, cleaned, final, status],
+            show_api=False,
         )
         compose_btn.click(
             compose,
-            inputs=[files, state, review, *settings_inputs],
+            inputs=[files, state, review, translation_backend, *settings_inputs],
             outputs=[state, cleaned, final, final_file, status],
+            show_api=False,
         )
         batch_btn.click(
             batch_auto,
-            inputs=[files, auto_translate, *settings_inputs],
+            inputs=[files, auto_translate, translation_backend, *settings_inputs],
             outputs=[batch_zip, status],
+            show_api=False,
         )
         refresh_status_btn.click(
             refresh_setup_status,
-            inputs=[model_path, font_path, realesrgan_model_path, output_dir],
+            inputs=[translation_backend, model_path, font_path, realesrgan_model_path, output_dir],
             outputs=[setup_status],
+            show_api=False,
         )
         download_translation_btn.click(
             download_translation_from_ui,
-            inputs=[model_path, font_path, realesrgan_model_path, output_dir],
+            inputs=[translation_backend, model_path, font_path, realesrgan_model_path, output_dir],
             outputs=[model_path, setup_status, status],
+            show_api=False,
         )
         download_upscale_btn.click(
             download_upscale_from_ui,
-            inputs=[model_path, font_path, realesrgan_model_path, output_dir],
+            inputs=[translation_backend, model_path, font_path, realesrgan_model_path, output_dir],
             outputs=[realesrgan_model_path, setup_status, status],
+            show_api=False,
         )
     return demo
 

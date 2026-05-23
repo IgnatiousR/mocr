@@ -53,6 +53,7 @@ class MangaTranslationPipeline:
                         region.translated_text = translate_japanese_to_english(
                             region.source_text,
                             str(settings.model_file),
+                            backend=settings.translation_backend,
                             threads=settings.llama_threads,
                             context=settings.llama_context,
                             max_tokens=settings.max_translation_tokens,

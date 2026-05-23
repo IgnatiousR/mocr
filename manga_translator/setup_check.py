@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import get_config_value
-from .model_manager import default_realesrgan_model_path, default_translation_model_path, resolve_project_path
+from .model_manager import default_realesrgan_model_path, default_translation_model_path, get_translation_backend, resolve_project_path
 
 
 @dataclass(frozen=True)
@@ -38,12 +38,14 @@ def _path_status(name: str, value: str, required: bool, action: str) -> CheckRes
 
 
 def collect_setup_checks(
+    translation_backend: str | None = None,
     translation_model_path: str | None = None,
     font_path: str | None = None,
     realesrgan_model_path: str | None = None,
     output_dir: str | None = None,
 ) -> list[CheckResult]:
-    translation_model_path = translation_model_path if translation_model_path is not None else get_config_value("TRANSLATION_MODEL_PATH") or str(default_translation_model_path())
+    translation_backend = (translation_backend if translation_backend is not None else get_translation_backend()).strip().lower()
+    translation_model_path = translation_model_path if translation_model_path is not None else get_config_value("TRANSLATION_MODEL_PATH") or str(default_translation_model_path(translation_backend))
     font_path = font_path if font_path is not None else get_config_value("FONT_PATH")
     realesrgan_model_path = realesrgan_model_path if realesrgan_model_path is not None else get_config_value("REALESRGAN_MODEL_PATH") or str(default_realesrgan_model_path())
     output_dir = output_dir if output_dir is not None else get_config_value("OUTPUT_DIR", "outputs")
@@ -78,12 +80,19 @@ def collect_setup_checks(
     )
 
     has_llama = module_available("llama_cpp")
+    has_ctranslate2 = module_available("ctranslate2") and module_available("sentencepiece")
+    if translation_backend in {"ctranslate2", "sugoi"}:
+        translation_package_ok = has_ctranslate2
+        translation_package_detail = "ctranslate2 and sentencepiece installed" if has_ctranslate2 else "ctranslate2 or sentencepiece is not installed"
+    else:
+        translation_package_ok = has_llama
+        translation_package_detail = "llama-cpp-python installed" if has_llama else "llama-cpp-python is not installed"
     checks.append(
         CheckResult(
             "Translation package",
-            "OK" if has_llama else "Optional",
-            "llama-cpp-python installed" if has_llama else "llama-cpp-python is not installed",
-            "" if has_llama else "python -m pip install -r requirements-translate.txt",
+            "OK" if translation_package_ok else "Optional",
+            translation_package_detail,
+            "" if translation_package_ok else "python -m pip install -r requirements-translate.txt",
         )
     )
     checks.append(
@@ -138,12 +147,14 @@ def collect_setup_checks(
 
 
 def setup_status_markdown(
+    translation_backend: str = "",
     translation_model_path: str = "",
     font_path: str = "",
     realesrgan_model_path: str = "",
     output_dir: str = "",
 ) -> str:
     checks = collect_setup_checks(
+        translation_backend=translation_backend or None,
         translation_model_path=translation_model_path or None,
         font_path=font_path or None,
         realesrgan_model_path=realesrgan_model_path or None,

@@ -48,13 +48,59 @@ def get_llama(model_path: str, threads: int, context: int):
     )
 
 
+@lru_cache(maxsize=1)
+def get_sugoi(model_path: str):
+    resolved_path = resolve_project_path(model_path)
+    if not resolved_path.exists():
+        raise RuntimeError(translation_missing_message(resolved_path))
+    try:
+        import ctranslate2
+        import sentencepiece
+    except Exception as exc:  # pragma: no cover - depends on optional install
+        raise RuntimeError("ctranslate2 and sentencepiece are not installed.") from exc
+
+    spm_path = resolved_path / "spm"
+    source_spm = spm_path / "spm.ja.nopretok.model"
+    target_spm = spm_path / "spm.en.nopretok.model"
+    translator = ctranslate2.Translator(str(resolved_path), device="cpu")
+    source_tokenizer = sentencepiece.SentencePieceProcessor(str(source_spm))
+    target_tokenizer = sentencepiece.SentencePieceProcessor(str(target_spm))
+    return translator, source_tokenizer, target_tokenizer
+
+
+def translate_japanese_to_english_sugoi(
+    text: str,
+    model_path: str,
+    max_tokens: int = 256,
+) -> str:
+    chunks = split_for_translation(text)
+    if not chunks:
+        return ""
+    translator, source_tokenizer, target_tokenizer = get_sugoi(model_path)
+    tokenized = [source_tokenizer.encode(chunk, out_type=str) for chunk in chunks]
+    results = translator.translate_batch(
+        source=tokenized,
+        beam_size=5,
+        max_decoding_length=max_tokens,
+    )
+    translated = [
+        target_tokenizer.decode(result.hypotheses[0]).replace("<unk>", "").strip()
+        for result in results
+    ]
+    return " ".join(part for part in translated if part).strip()
+
+
 def translate_japanese_to_english(
     text: str,
     model_path: str,
+    backend: str = "llama",
     threads: int = 4,
     context: int = 2048,
     max_tokens: int = 256,
 ) -> str:
+    if backend.strip().lower() in {"ctranslate2", "sugoi"}:
+        return translate_japanese_to_english_sugoi(text, model_path, max_tokens=max_tokens)
+
     chunks = split_for_translation(text)
     if not chunks:
         return ""

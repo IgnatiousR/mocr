@@ -6,7 +6,7 @@ A local Python/Gradio app for translating Japanese manga or image text on a norm
 
 1. Detect text regions with PaddleOCR.
 2. OCR Japanese crops with Manga OCR.
-3. Translate with a local GGUF model through `llama-cpp-python`.
+3. Translate with a local GGUF model through `llama-cpp-python`, or Sugoi V4 through CTranslate2.
 4. Let you review/edit OCR and translation text.
 5. Clean original text with OpenCV inpainting.
 6. Render translated text with Pillow.
@@ -18,10 +18,10 @@ Supported input formats: PNG, JPG, JPEG, WEBP.
 
 Use Python 3.10 or 3.11. Python 3.11 is recommended on Windows.
 
-Open PowerShell in this folder:
+Open PowerShell in the project folder. For example, replace `<project-folder>` with the path where you cloned or downloaded this repository:
 
 ```powershell
-cd "C:\Users\my pc\Documents\Playground"
+cd "<project-folder>"
 ```
 
 Create a virtual environment:
@@ -76,7 +76,7 @@ python -m pip install -r requirements-ocr.txt
 python -m pip install -r requirements-translate.txt
 ```
 
-If `llama-cpp-python` fails to build on Windows, install Microsoft C++ Build Tools, then retry.
+If `llama-cpp-python` fails to build on Windows, install Microsoft C++ Build Tools, then retry. Sugoi V4 uses `ctranslate2` and `sentencepiece` instead of `llama-cpp-python`.
 
 ### 4. Optional Real-ESRGAN Upscaling
 
@@ -106,6 +106,7 @@ Copy-Item .env.example .env
 Edit `.env`:
 
 ```text
+TRANSLATION_BACKEND=llama
 TRANSLATION_MODEL_PATH=models/translation/gemma-2-2b-jpn-it-translate-Q4_K_M.gguf
 FONT_PATH=C:/Windows/Fonts/arial.ttf
 REALESRGAN_MODEL_PATH=models/upscale/RealESRGAN_x4plus_anime_6B.pth
@@ -135,7 +136,12 @@ OCR libraries such as PaddleOCR and Manga OCR may still use their own package/us
 
 ## Translation Model
 
-The app expects a local `.gguf` translation model file.
+The app supports two local translation backends:
+
+- `llama`: loads a local `.gguf` model through `llama-cpp-python`.
+- `sugoi`: loads the Sugoi V4 Japanese-to-English CTranslate2 model directory.
+
+### GGUF Models
 
 Recommended GGUF repo:
 
@@ -149,6 +155,48 @@ Default project-local path:
 
 ```text
 models/translation/gemma-2-2b-jpn-it-translate-Q4_K_M.gguf
+```
+
+Recommended small GGUF options:
+
+| Model | Repo | File | Notes |
+| --- | --- | --- | --- |
+| Gemma 2 2B Japanese translate | `webbigdata/gemma-2-2b-jpn-it-translate-gguf` | `gemma-2-2b-jpn-it-translate-Q4_K_M.gguf` | Current default; small and translation-focused. |
+| Qwen2.5 1.5B Instruct | `Qwen/Qwen2.5-1.5B-Instruct-GGUF` | `qwen2.5-1.5b-instruct-q4_k_m.gguf` | Smallest alternative; fastest, but lower quality. |
+| Qwen2.5 3B Instruct | `Qwen/Qwen2.5-3B-Instruct-GGUF` | `qwen2.5-3b-instruct-q4_k_m.gguf` | Recommended alternative for CPU use. |
+| Qwen2.5 7B Instruct | `Qwen/Qwen2.5-7B-Instruct-GGUF` | `qwen2.5-7b-instruct-q4_k_m.gguf` | Better quality, but slower and heavier on RAM. |
+
+To use a different model, update `.env` with the matching repo, file, and local path:
+
+```text
+TRANSLATION_MODEL_REPO=Qwen/Qwen2.5-3B-Instruct-GGUF
+TRANSLATION_MODEL_FILE=qwen2.5-3b-instruct-q4_k_m.gguf
+TRANSLATION_MODEL_PATH=models/translation/qwen2.5-3b-instruct-q4_k_m.gguf
+```
+
+### Sugoi V4 CTranslate2
+
+Sugoi V4 is a small Japanese-to-English NMT model for manga/anime-style text. It is not a GGUF file; it uses a CTranslate2 model directory with SentencePiece tokenizers.
+
+Recommended Sugoi V4 repo:
+
+```text
+entai2965/sugoi-v4-ja-en-ctranslate2
+```
+
+Use these `.env` values:
+
+```text
+TRANSLATION_BACKEND=sugoi
+TRANSLATION_MODEL_REPO=entai2965/sugoi-v4-ja-en-ctranslate2
+TRANSLATION_MODEL_FILE=
+TRANSLATION_MODEL_PATH=models/translation/sugoi-v4-ja-en-ctranslate2
+```
+
+Install translation packages first:
+
+```powershell
+python -m pip install -r requirements-translate.txt
 ```
 
 Download with:
@@ -258,7 +306,7 @@ Filenames include a short hash so same-named files from different folders do not
 
 - Start with `LLAMA_THREADS=4`.
 - Keep `LLAMA_CONTEXT=2048`.
-- Use a Q4 GGUF translation model.
+- Use a Q4 GGUF translation model, or `TRANSLATION_BACKEND=sugoi` for the smaller Sugoi V4 CTranslate2 model.
 - Keep Real-ESRGAN disabled unless you are okay with slow CPU upscaling.
 - Test one image before running a batch.
 - Close memory-heavy apps before large batches.
@@ -295,6 +343,12 @@ python scripts\download_models.py --translation
 ```
 
 `llama-cpp-python is not installed`
+
+```powershell
+python -m pip install -r requirements-translate.txt
+```
+
+`ctranslate2 or sentencepiece is not installed`
 
 ```powershell
 python -m pip install -r requirements-translate.txt
