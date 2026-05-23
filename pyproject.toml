@@ -1,0 +1,43 @@
+[project]
+name = "cpu-manga-translator"
+version = "0.1.0"
+description = "CPU-first local manga/image translation web app."
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "gradio>=4.44,<5",
+    "huggingface-hub>=0.19.3,<1.0",
+    "fastapi>=0.112,<0.116",
+    "starlette>=0.37,<0.39",
+    "pydantic>=2.7,<2.11",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "opencv-python>=4.9",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "paddleocr>=3.0",
+    "manga-ocr>=0.1.14",
+    "torch>=2.3",
+]
+translation = [
+    "llama-cpp-python>=0.2.90",
+]
+upscale = [
+    "realesrgan>=0.3.0",
+    "basicsr>=1.4.2",
+]
+dev = [
+    "pytest>=8.2",
+]
+
+[project.scripts]
+manga-translator = "manga_translator.ui:main"
+manga-translator-check = "manga_translator.setup_check:main"
+manga-translator-download-models = "scripts.download_models:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

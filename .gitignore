@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+outputs/
+models/*
+!models/.gitkeep
+!models/translation/
+!models/translation/.gitkeep
+!models/upscale/
+!models/upscale/.gitkeep
+*.pyc
+*.pyo
+*.gguf
+*.pth
+gradio-server*.log

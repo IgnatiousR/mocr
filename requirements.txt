@@ -1,0 +1,4 @@
+-r requirements-base.txt
+-r requirements-ocr.txt
+-r requirements-translate.txt
+-r requirements-upscale.txt
