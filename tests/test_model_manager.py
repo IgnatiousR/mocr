@@ -69,6 +69,7 @@ def test_download_translation_model_can_be_mocked(tmp_path, monkeypatch):
     fake_module.hf_hub_download = lambda repo_id, filename: str(cached)
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_module)
     monkeypatch.setattr(model_manager, "TRANSLATION_DIR", tmp_path / "models" / "translation")
+    monkeypatch.setenv("TRANSLATION_BACKEND", "llama")
     monkeypatch.setenv("TRANSLATION_MODEL_PATH", str(destination))
     monkeypatch.delenv("TRANSLATION_MODEL_REPO", raising=False)
     monkeypatch.delenv("TRANSLATION_MODEL_FILE", raising=False)
@@ -93,7 +94,7 @@ def test_download_sugoi_model_can_be_mocked(tmp_path, monkeypatch):
     fake_module.snapshot_download = fake_snapshot_download
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_module)
     monkeypatch.setattr(model_manager, "TRANSLATION_DIR", tmp_path / "models" / "translation")
-    monkeypatch.delenv("TRANSLATION_MODEL_PATH", raising=False)
+    monkeypatch.setenv("TRANSLATION_MODEL_PATH", str(destination))
     monkeypatch.delenv("TRANSLATION_MODEL_REPO", raising=False)
 
     path = download_translation_model("sugoi")

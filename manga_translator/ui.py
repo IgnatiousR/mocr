@@ -226,72 +226,185 @@ def download_upscale_from_ui(translation_backend: str, model_path: str, font_pat
 
 
 def build_app() -> gr.Blocks:
-    with gr.Blocks(title="CPU Manga Translator") as demo:
+    css = """
+    :root {
+        --radius-lg: 0 !important;
+        --radius-md: 0 !important;
+        --radius-sm: 0 !important;
+        --radius-xs: 0 !important;
+        --button-large-radius: 0 !important;
+        --button-primary-radius: 0 !important;
+        --button-secondary-radius: 0 !important;
+        --input-radius: 0 !important;
+        --block-radius: 0 !important;
+        --block-border-width: 2px !important;
+        --input-border-width: 2px !important;
+        --button-border-width: 2px !important;
+        --border-color-primary: #3a4658 !important;
+        --border-color-accent: #465468 !important;
+        --block-border-color: #3a4658 !important;
+        --input-border-color: #3a4658 !important;
+    }
+    .app-shell { gap: 18px; align-items: flex-start; }
+    .settings-sidebar {
+        min-width: 300px;
+        max-width: 360px;
+        position: sticky;
+        top: 12px;
+        align-self: flex-start;
+    }
+    .main-workspace { min-width: 0; }
+    .action-row button { min-width: 160px; }
+    .gradio-container,
+    .gradio-container * {
+        border-radius: 0 !important;
+    }
+    .gradio-container,
+    .gradio-container > .contain {
+        border: 0 !important;
+        outline: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+    }
+    .gradio-container {
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+    }
+    .gradio-container button,
+    .gradio-container input,
+    .gradio-container textarea,
+    .gradio-container select,
+    .gradio-container .wrap,
+    .gradio-container .block,
+    .gradio-container .block-label,
+    .gradio-container .tab-nav,
+    .gradio-container .tabitem,
+    .gradio-container table,
+    .gradio-container th,
+    .gradio-container td {
+        border-radius: 0 !important;
+    }
+    .gradio-container .block,
+    .gradio-container .form,
+    .gradio-container .wrap,
+    .gradio-container .panel,
+    .gradio-container .tabs,
+    .gradio-container .tabitem,
+    .gradio-container .accordion {
+        border-width: 2px !important;
+        border-color: #3a4658 !important;
+        outline: 0 !important;
+    }
+    .gradio-container .block-label {
+        border-color: #3a4658 !important;
+    }
+    .gradio-container .wrap,
+    .gradio-container .block,
+    .gradio-container .form,
+    .gradio-container .tabitem,
+    .gradio-container .tabs {
+        box-shadow: none !important;
+    }
+    .gradio-container button {
+        box-shadow: none !important;
+        text-transform: none;
+    }
+    .gradio-container .primary {
+        border: 2px solid #ff6a00 !important;
+    }
+    .gradio-container .secondary {
+        border: 2px solid var(--border-color-primary) !important;
+    }
+    .gradio-container input,
+    .gradio-container textarea,
+    .gradio-container select {
+        border-width: 2px !important;
+        border-color: #3a4658 !important;
+        box-shadow: none !important;
+    }
+    .gradio-container .upload-container,
+    .gradio-container .file-preview,
+    .gradio-container .file-preview-holder {
+        border-color: #3a4658 !important;
+        outline: 0 !important;
+        box-shadow: none !important;
+    }
+    @media (max-width: 900px) {
+        .settings-sidebar {
+            max-width: none;
+            position: static;
+        }
+    }
+    """
+    with gr.Blocks(title="CPU Manga Translator", css=css) as demo:
+        defaults = AppSettings.with_env_defaults()
+        default_backend = defaults.translation_backend if defaults.translation_backend in {"llama", "sugoi"} else "llama"
         state = gr.State("")
         gr.Markdown("# CPU Manga Translator")
-        with gr.Row():
-            files = gr.File(
-                label="Images",
-                file_count="multiple",
-                file_types=["image"],
-            )
-            with gr.Column():
-                auto_translate = gr.Checkbox(label="Auto translate during analysis", value=True)
-                translation_backend = gr.Dropdown(["llama", "sugoi"], value="llama", label="translation backend")
-                model_path = gr.Textbox(label="Translation model path", placeholder="models/translation/gemma-translate-q4.gguf")
-                font_path = gr.Textbox(label="Font path", placeholder="C:/Windows/Fonts/arial.ttf")
-                realesrgan_model_path = gr.Textbox(label="Real-ESRGAN model path", placeholder="C:/models/RealESRGAN_x4plus_anime_6B.pth")
-                output_dir = gr.Textbox(label="Output directory", placeholder="outputs")
 
-        with gr.Accordion("Models", open=False):
-            with gr.Row():
-                download_translation_btn = gr.Button("Download translation model")
-                download_upscale_btn = gr.Button("Download Real-ESRGAN model")
+        with gr.Row(elem_classes=["app-shell"]):
+            with gr.Column(scale=1, min_width=300, elem_classes=["settings-sidebar"]):
+                with gr.Accordion("Models", open=True):
+                    auto_translate = gr.Checkbox(label="Auto translate during analysis", value=True)
+                    translation_backend = gr.Dropdown(["llama", "sugoi"], value=default_backend, label="translation backend")
+                    model_path = gr.Textbox(value=defaults.translation_model_path, label="Translation model path", placeholder="models/translation/gemma-translate-q4.gguf")
+                    realesrgan_model_path = gr.Textbox(value=defaults.realesrgan_model_path, label="Real-ESRGAN model path", placeholder="C:/models/RealESRGAN_x4plus_anime_6B.pth")
+                    enable_upscale = gr.Checkbox(label="Real-ESRGAN anime upscale", value=defaults.enable_upscale)
+                    with gr.Row():
+                        download_translation_btn = gr.Button("Download translation model")
+                        download_upscale_btn = gr.Button("Download Real-ESRGAN model")
 
-        with gr.Accordion("Setup Status", open=False):
-            setup_status = gr.Markdown(refresh_setup_status("", "", "", "", ""))
-            refresh_status_btn = gr.Button("Refresh setup status")
+                with gr.Accordion("OCR and setup", open=False):
+                    setup_status = gr.Markdown(refresh_setup_status("", "", "", "", ""))
+                    refresh_status_btn = gr.Button("Refresh setup status")
 
-        with gr.Accordion("CPU and rendering settings", open=False):
-            with gr.Row():
-                threads = gr.Slider(1, 16, value=4, step=1, label="llama.cpp CPU threads")
-                context = gr.Slider(512, 8192, value=2048, step=512, label="llama context")
-                max_tokens = gr.Slider(32, 1024, value=256, step=32, label="max translation tokens")
-            with gr.Row():
-                mask_padding = gr.Slider(0, 40, value=8, step=1, label="mask padding")
-                inpaint_radius = gr.Slider(1, 12, value=3, step=1, label="inpaint radius")
-                font_size = gr.Slider(8, 72, value=28, step=1, label="font size")
-            with gr.Row():
-                auto_font_size = gr.Checkbox(label="auto-fit font size", value=True)
-                output_format = gr.Dropdown(["PNG", "JPEG"], value="PNG", label="output format")
-                enable_upscale = gr.Checkbox(label="Real-ESRGAN anime upscale", value=False)
+                with gr.Accordion("CPU", open=False):
+                    threads = gr.Slider(1, 16, value=defaults.llama_threads, step=1, label="llama.cpp CPU threads")
+                    context = gr.Slider(512, 8192, value=defaults.llama_context, step=512, label="llama context")
+                    max_tokens = gr.Slider(32, 1024, value=defaults.max_translation_tokens, step=32, label="max translation tokens")
 
-        with gr.Row():
-            analyze_btn = gr.Button("Analyze first image", variant="primary")
-            compose_btn = gr.Button("Compose reviewed image")
-            batch_btn = gr.Button("Run full batch")
+                with gr.Accordion("Rendering and output", open=False):
+                    font_path = gr.Textbox(value=defaults.font_path, label="Font path", placeholder="C:/Windows/Fonts/arial.ttf")
+                    output_dir = gr.Textbox(value=defaults.output_dir, label="Output directory", placeholder="outputs")
+                    mask_padding = gr.Slider(0, 40, value=defaults.mask_padding, step=1, label="mask padding")
+                    inpaint_radius = gr.Slider(1, 12, value=defaults.inpaint_radius, step=1, label="inpaint radius")
+                    font_size = gr.Slider(8, 72, value=defaults.font_size, step=1, label="font size")
+                    auto_font_size = gr.Checkbox(label="auto-fit font size", value=defaults.auto_font_size)
+                    output_format = gr.Dropdown(["PNG", "JPEG"], value=defaults.output_format, label="output format")
 
-        status = gr.Textbox(label="Status", lines=4)
-        review = gr.Dataframe(
-            headers=["id", "enabled", "source_text", "translated_text", "confidence", "notes"],
-            datatype=["number", "bool", "str", "str", "str", "str"],
-            interactive=True,
-            label="Review and edit regions",
-        )
+            with gr.Column(scale=4, min_width=520, elem_classes=["main-workspace"]):
+                files = gr.File(
+                    label="Images",
+                    file_count="multiple",
+                    file_types=["image"],
+                )
 
-        with gr.Tabs():
-            with gr.Tab("Original"):
-                original = gr.Image(label="Original", type="filepath")
-            with gr.Tab("Detected boxes"):
-                overlay = gr.Image(label="Detected boxes", type="filepath")
-            with gr.Tab("Cleaned"):
-                cleaned = gr.Image(label="Cleaned", type="filepath")
-            with gr.Tab("Final composite"):
-                final = gr.Image(label="Final composite", type="filepath")
+                with gr.Row(elem_classes=["action-row"]):
+                    analyze_btn = gr.Button("Analyze first image", variant="primary")
+                    compose_btn = gr.Button("Compose reviewed image")
+                    batch_btn = gr.Button("Run full batch")
 
-        with gr.Row():
-            final_file = gr.File(label="Final image")
-            batch_zip = gr.File(label="Batch ZIP")
+                status = gr.Textbox(label="Status", lines=4)
+                review = gr.Dataframe(
+                    headers=["id", "enabled", "source_text", "translated_text", "confidence", "notes"],
+                    datatype=["number", "bool", "str", "str", "str", "str"],
+                    interactive=True,
+                    label="Review and edit regions",
+                )
+
+                with gr.Tabs():
+                    with gr.Tab("Original"):
+                        original = gr.Image(label="Original", type="filepath")
+                    with gr.Tab("Detected boxes"):
+                        overlay = gr.Image(label="Detected boxes", type="filepath")
+                    with gr.Tab("Cleaned"):
+                        cleaned = gr.Image(label="Cleaned", type="filepath")
+                    with gr.Tab("Final composite"):
+                        final = gr.Image(label="Final composite", type="filepath")
+
+                with gr.Row():
+                    final_file = gr.File(label="Final image")
+                    batch_zip = gr.File(label="Batch ZIP")
 
         settings_inputs = [
             model_path,
