@@ -46,9 +46,9 @@ def missing_modules(modules: list[str]) -> list[str]:
 
 
 def translation_dependency_modules(translation_backend: str) -> list[str]:
-    if translation_backend in {"ctranslate2", "sugoi"}:
+    if translation_backend in {"ctranslate2", "sugoi", "jparacrawl", "jparacrawl-big"}:
         return ["ctranslate2", "sentencepiece"]
-    if translation_backend in {"fugumt", "fugu", "fugu-mt", "fugumt-ja-en", "transformers"}:
+    if translation_backend in {"fugumt", "fugu", "fugu-mt", "fugumt-ja-en", "transformers", "nllb", "m2m100", "mbart"}:
         return ["transformers", "torch"]
     return ["llama_cpp"]
 

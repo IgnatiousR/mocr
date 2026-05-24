@@ -62,7 +62,7 @@ def _extract_polys_and_scores(result) -> list[tuple[list[list[float]], float | N
     return extracted
 
 
-def detect_text_regions(image: Image.Image) -> list[TextRegion]:
+def _detect_text_regions_paddle(image: Image.Image) -> list[TextRegion]:
     ocr = get_paddle_ocr()
     rgb = image.convert("RGB")
     try:
@@ -78,6 +78,7 @@ def detect_text_regions(image: Image.Image) -> list[TextRegion]:
                 id=len(regions) + 1,
                 box=poly,
                 bbox=bbox,
+                polygon=poly,
                 vertical=_is_vertical(bbox),
                 confidence=score,
             )
@@ -87,6 +88,51 @@ def detect_text_regions(image: Image.Image) -> list[TextRegion]:
     for idx, region in enumerate(sorted_regions, start=1):
         region.id = idx
     return sorted_regions
+
+
+def _detect_text_regions_ctd(image: Image.Image) -> list[TextRegion]:
+    try:
+        from rusty_manga_image_translator import detect_text_regions as rust_detect
+    except Exception as exc:  # pragma: no cover - optional quality bridge
+        raise RuntimeError("CTD detector bridge is not installed; falling back to PaddleOCR.") from exc
+
+    result = rust_detect(image.convert("RGB"))
+    regions: list[TextRegion] = []
+    for item in result or []:
+        poly = item.get("polygon") or item.get("box") or []
+        if not poly and "bbox" in item:
+            x1, y1, x2, y2 = item["bbox"]
+            poly = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+        if not poly:
+            continue
+        poly = [[float(x), float(y)] for x, y in poly]
+        bbox = _poly_to_bbox(poly)
+        regions.append(
+            TextRegion(
+                id=len(regions) + 1,
+                box=poly,
+                bbox=bbox,
+                polygon=poly,
+                vertical=_is_vertical(bbox),
+                confidence=item.get("confidence"),
+            )
+        )
+    return _sort_regions(regions)
+
+
+def detect_text_regions(image: Image.Image, backend: str = "paddle") -> tuple[list[TextRegion], list[str]]:
+    backend = (backend or "paddle").strip().lower()
+    notes: list[str] = []
+    if backend in {"ctd", "quality"}:
+        try:
+            regions = _detect_text_regions_ctd(image)
+            for idx, region in enumerate(regions, start=1):
+                region.id = idx
+            return regions, notes
+        except RuntimeError as exc:
+            notes.append(str(exc))
+    regions = _detect_text_regions_paddle(image)
+    return regions, notes
 
 
 def draw_region_overlay(image: Image.Image, regions: list[TextRegion]) -> Image.Image:

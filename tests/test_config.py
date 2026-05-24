@@ -73,8 +73,9 @@ def test_default_model_paths_are_project_local(monkeypatch):
 
     assert "models" in settings.translation_model_path
     assert "models" in settings.realesrgan_model_path
-    assert settings.inpainter_backend == "opencv-telea"
-    assert settings.inpaint_model_path == ""
+    assert settings.processing_profile == "quality"
+    assert settings.inpainter_backend == "anime-lama"
+    assert "inpaint" in settings.inpaint_model_path
 
 
 def test_neural_inpainter_default_model_path_is_project_local(monkeypatch):

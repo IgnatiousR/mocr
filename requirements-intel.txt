@@ -1,0 +1,7 @@
+torch==2.3.1
+intel-extension-for-pytorch==2.3.100
+
+# For llama-cpp-python with Vulkan support:
+# You must install the Vulkan SDK and compile from source, e.g.:
+# set CMAKE_ARGS=-DGGML_VULKAN=1
+# pip install --upgrade --force-reinstall --no-cache-dir llama-cpp-python

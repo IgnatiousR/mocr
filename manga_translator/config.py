@@ -52,3 +52,11 @@ def detected_cpu_count() -> int:
 
 def default_llama_threads(env_path: str | Path = ENV_FILE) -> int:
     return clamp_llama_threads(get_int_config_value("LLAMA_THREADS", detected_cpu_count(), env_path))
+
+
+def default_llama_gpu_layers(env_path: str | Path = ENV_FILE) -> int:
+    return get_int_config_value("LLAMA_GPU_LAYERS", 0, env_path)
+
+
+def default_hardware_acceleration(env_path: str | Path = ENV_FILE) -> str:
+    return get_config_value("HARDWARE_ACCELERATION", "cpu", env_path).lower()

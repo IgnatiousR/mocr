@@ -167,8 +167,8 @@ def test_inpainter_controls_are_present():
         and component.get("props", {}).get("value") == "Download inpainter model"
     )
 
-    assert inpainter["props"].get("value") == "opencv-telea"
-    assert inpaint_path["props"].get("value") == ""
+    assert inpainter["props"].get("value") == "anime-lama"
+    assert "anime-manga-big-lama.pt" in inpaint_path["props"].get("value")
     assert download is not None
 
 
@@ -205,8 +205,8 @@ def test_batch_callback_output_count_matches_return_tuple():
     batch_dependency = next(
         dependency
         for dependency in dependencies
-        if len(dependency.get("outputs") or []) == 10
+        if len(dependency.get("outputs") or []) == 11
     )
 
-    assert len(batch_dependency["inputs"]) == 21
-    assert len(batch_dependency["outputs"]) == 10
+    assert len(batch_dependency["inputs"]) == 34
+    assert len(batch_dependency["outputs"]) == 11

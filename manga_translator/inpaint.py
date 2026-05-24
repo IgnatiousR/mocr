@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from .config import default_hardware_acceleration
 from .model_manager import NEURAL_INPAINTERS, OPENCV_INPAINTERS, inpaint_missing_message, normalize_inpainter_backend, resolve_project_path
 from .models import TextRegion
 
@@ -31,6 +32,19 @@ def make_text_mask(size: tuple[int, int], regions: list[TextRegion], padding: in
     return mask
 
 
+def refine_text_mask(mask: np.ndarray, dilation: int = 6, blur: int = 3) -> np.ndarray:
+    refined = mask.copy()
+    if dilation > 0:
+        kernel_size = max(1, dilation * 2 + 1)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        refined = cv2.dilate(refined, kernel, iterations=1)
+    if blur > 0:
+        blur_size = blur if blur % 2 == 1 else blur + 1
+        refined = cv2.GaussianBlur(refined, (blur_size, blur_size), 0)
+        _, refined = cv2.threshold(refined, 24, 255, cv2.THRESH_BINARY)
+    return refined.astype(np.uint8)
+
+
 def _restore_alpha(result: Image.Image, original: Image.Image) -> Image.Image:
     if original.mode == "RGBA":
         result.putalpha(original.getchannel("A"))
@@ -47,13 +61,13 @@ def _opencv_inpaint(image: Image.Image, mask: np.ndarray, radius: int, flag: int
 
 
 @lru_cache(maxsize=3)
-def _load_torchscript_model(model_path: str):
+def _load_torchscript_model(model_path: str, device: str = "cpu"):
     try:
         import torch
     except Exception as exc:  # pragma: no cover - depends on optional install
         raise RuntimeError("Neural inpainters require torch. Install requirements-inpaint.txt first.") from exc
 
-    model = torch.jit.load(model_path, map_location="cpu")
+    model = torch.jit.load(model_path, map_location=device)
     model.eval()
     return model
 
@@ -77,7 +91,7 @@ def _tensor_to_rgb_image(output) -> np.ndarray:
     return np.clip(array, 0, 255).astype("uint8")
 
 
-def _run_lama_model(model, rgb_array: np.ndarray, mask: np.ndarray) -> np.ndarray:
+def _run_lama_model(model, rgb_array: np.ndarray, mask: np.ndarray, device: str = "cpu") -> np.ndarray:
     import torch
 
     image = np.transpose(rgb_array.astype("float32") / 255.0, (2, 0, 1))
@@ -86,13 +100,13 @@ def _run_lama_model(model, rgb_array: np.ndarray, mask: np.ndarray) -> np.ndarra
     mask_norm, _ = _pad_to_mod(mask_norm, 8)
     with torch.no_grad():
         output = model(
-            torch.from_numpy(image).unsqueeze(0),
-            torch.from_numpy((mask_norm > 0).astype("float32")).unsqueeze(0),
+            torch.from_numpy(image).unsqueeze(0).to(device),
+            torch.from_numpy((mask_norm > 0).astype("float32")).unsqueeze(0).to(device),
         )
     return _tensor_to_rgb_image(output)[:height, :width]
 
 
-def _run_migan_model(model, rgb_array: np.ndarray, mask: np.ndarray) -> np.ndarray:
+def _run_migan_model(model, rgb_array: np.ndarray, mask: np.ndarray, device: str = "cpu") -> np.ndarray:
     import torch
 
     height, width = rgb_array.shape[:2]
@@ -104,7 +118,7 @@ def _run_migan_model(model, rgb_array: np.ndarray, mask: np.ndarray) -> np.ndarr
     erased_image = image * (1 - mask_norm)
     input_image = np.concatenate([0.5 - mask_norm, erased_image], axis=0)
     with torch.no_grad():
-        output = model(torch.from_numpy(input_image).unsqueeze(0))
+        output = model(torch.from_numpy(input_image).unsqueeze(0).to(device))
     result = _tensor_to_rgb_image(output)
     return cv2.resize(result, (width, height), interpolation=cv2.INTER_CUBIC)
 
@@ -116,11 +130,17 @@ def _neural_inpaint(image: Image.Image, mask: np.ndarray, backend: str, model_pa
 
     rgb = image.convert("RGB")
     rgb_array = np.array(rgb)
-    model = _load_torchscript_model(str(resolved_path))
+    
+    hardware = default_hardware_acceleration()
+    device = "xpu" if hardware == "intel_xpu" else "cpu"
+    if device == "xpu":
+        import intel_extension_for_pytorch as ipex
+        
+    model = _load_torchscript_model(str(resolved_path), device)
     if backend == "migan":
-        result = _run_migan_model(model, rgb_array, mask)
+        result = _run_migan_model(model, rgb_array, mask, device)
     else:
-        result = _run_lama_model(model, rgb_array, mask)
+        result = _run_lama_model(model, rgb_array, mask, device)
 
     mask_pixels = mask > 0
     composed = rgb_array.copy()
@@ -135,9 +155,10 @@ def inpaint_text(
     radius: int = 3,
     backend: str = "opencv-telea",
     model_path: str = "",
+    mask: np.ndarray | None = None,
 ) -> Image.Image:
     backend = normalize_inpainter_backend(backend)
-    mask = make_text_mask(image.size, regions, padding)
+    mask = mask if mask is not None else make_text_mask(image.size, regions, padding)
     if not mask.any():
         return image.copy()
     if backend in OPENCV_INPAINTERS:

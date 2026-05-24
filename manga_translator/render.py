@@ -129,10 +129,31 @@ def stack_to_box(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont
 
 
 def is_vertical_region(region: TextRegion) -> bool:
+    if region.direction == "horizontal":
+        return False
+    if region.direction == "vertical":
+        return True
     x1, y1, x2, y2 = region.bbox
     width = max(1, x2 - x1)
     height = max(1, y2 - y1)
     return region.vertical or height > width * 1.4
+
+
+def _parse_color(value: str, fallback: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    value = (value or "").strip()
+    if not value:
+        return fallback
+    if value.startswith("#"):
+        value = value[1:]
+    if len(value) not in {6, 8}:
+        return fallback
+    try:
+        channels = [int(value[idx : idx + 2], 16) for idx in range(0, len(value), 2)]
+    except ValueError:
+        return fallback
+    if len(channels) == 3:
+        channels.append(255)
+    return tuple(channels)  # type: ignore[return-value]
 
 
 def _fit_sizes(preferred_size: int, box_width: int, box_height: int, auto_size: bool, min_size: int = READABLE_MIN_FONT_SIZE) -> list[int]:
@@ -230,6 +251,10 @@ def render_translations(
     text_box_gap: int = RENDER_BOX_PAD,
     line_gap: int = 0,
     overflow_text: bool = True,
+    render_direction: str = "auto",
+    font_color: str = "#181818",
+    stroke_color: str = "#ffffff",
+    stroke_width: int = 1,
 ) -> Image.Image:
     out = image.convert("RGBA").copy()
     draw = ImageDraw.Draw(out)
@@ -241,15 +266,20 @@ def render_translations(
         pad = text_box_gap
         box_width = max(8, x2 - x1 - pad * 2)
         box_height = max(8, y2 - y1 - pad * 2)
+        region_vertical = is_vertical_region(region)
+        if render_direction == "horizontal":
+            region_vertical = False
+        elif render_direction == "vertical":
+            region_vertical = True
         fit = fit_text(
             draw,
             text,
             box_width,
             box_height,
             font_path,
-            font_size,
+            region.font_size or font_size,
             auto_font_size,
-            vertical=is_vertical_region(region),
+            vertical=region_vertical,
             line_gap=line_gap,
             allow_unreadable=overflow_text,
         )
@@ -266,11 +296,11 @@ def render_translations(
         draw.multiline_text(
             (text_x, text_y),
             fit.text,
-            fill=(24, 24, 24, 255),
+            fill=_parse_color(region.font_color or font_color, (24, 24, 24, 255)),
             font=fit.font,
             spacing=text_spacing(fit.font, line_gap),
             align="center",
-            stroke_width=1,
-            stroke_fill=(255, 255, 255, 180),
+            stroke_width=region.stroke_width if region.stroke_width is not None else stroke_width,
+            stroke_fill=_parse_color(region.stroke_color or stroke_color, (255, 255, 255, 180)),
         )
     return out

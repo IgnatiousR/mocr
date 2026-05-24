@@ -17,6 +17,19 @@ from .model_manager import (
 
 
 class AppSettings(BaseModel):
+    processing_profile: str = "quality"
+    detector_backend: str = "auto"
+    pre_upscale_ratio: int = Field(default=1, ge=1, le=4)
+    revert_pre_upscale: bool = True
+    mask_refine: bool = True
+    mask_refine_dilation: int = Field(default=6, ge=0, le=80)
+    mask_refine_blur: int = Field(default=3, ge=0, le=31)
+    pre_dict_path: str = ""
+    post_dict_path: str = ""
+    render_direction: str = "auto"
+    font_color: str = "#181818"
+    stroke_color: str = "#ffffff"
+    stroke_width: int = Field(default=1, ge=0, le=8)
     translation_backend: str = "llama"
     translation_model_path: str = ""
     font_path: str = ""
@@ -62,6 +75,8 @@ class AppSettings(BaseModel):
     def with_env_defaults(
         cls,
         translation_model_path: str = "",
+        processing_profile: str = "",
+        detector_backend: str = "",
         translation_backend: str = "",
         font_path: str = "",
         realesrgan_model_path: str = "",
@@ -72,10 +87,18 @@ class AppSettings(BaseModel):
         llama_context: int | None = None,
         **kwargs: Any,
     ) -> "AppSettings":
+        resolved_profile = (processing_profile or get_config_value("PROCESSING_PROFILE", "quality")).strip().lower()
         resolved_backend = (translation_backend or get_config_value("TRANSLATION_BACKEND", "llama")).strip().lower()
         resolved_inpainter = normalize_inpainter_backend(inpainter_backend or get_config_value("INPAINTER_BACKEND", "opencv-telea"))
+        if resolved_profile == "quality" and resolved_inpainter == "opencv-telea":
+            resolved_inpainter = "anime-lama"
         default_inpaint_path = str(default_inpaint_model_path(resolved_inpainter)) if resolved_inpainter in NEURAL_INPAINTERS else ""
+        pre_upscale_ratio_value = kwargs.pop("pre_upscale_ratio", None)
+        pre_dict_path_value = kwargs.pop("pre_dict_path", "")
+        post_dict_path_value = kwargs.pop("post_dict_path", "")
         return cls(
+            processing_profile=resolved_profile,
+            detector_backend=detector_backend or get_config_value("DETECTOR_BACKEND", "auto"),
             translation_backend=resolved_backend,
             translation_model_path=translation_model_path or str(default_translation_model_path(resolved_backend)),
             font_path=font_path or get_config_value("FONT_PATH"),
@@ -85,6 +108,9 @@ class AppSettings(BaseModel):
             output_dir=output_dir or get_config_value("OUTPUT_DIR", "outputs"),
             llama_threads=llama_threads if llama_threads is not None else default_llama_threads(),
             llama_context=llama_context if llama_context is not None else get_int_config_value("LLAMA_CONTEXT", 2048),
+            pre_upscale_ratio=pre_upscale_ratio_value if pre_upscale_ratio_value is not None else get_int_config_value("PRE_UPSCALE_RATIO", 1),
+            pre_dict_path=pre_dict_path_value or get_config_value("PRE_DICT_PATH"),
+            post_dict_path=post_dict_path_value or get_config_value("POST_DICT_PATH"),
             **kwargs,
         )
 
@@ -93,19 +119,41 @@ class TextRegion(BaseModel):
     id: int
     box: list[list[float]]
     bbox: tuple[int, int, int, int]
+    polygon: list[list[float]] = Field(default_factory=list)
+    merged_from: list[int] = Field(default_factory=list)
+    raw_text: str = ""
     vertical: bool = False
+    direction: str = "auto"
+    font_size: int | None = None
+    font_color: str = ""
+    stroke_color: str = ""
+    stroke_width: int | None = None
     confidence: float | None = None
     source_text: str = ""
     translated_text: str = ""
     enabled: bool = True
+    locked: bool = False
     notes: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.polygon:
+            self.polygon = [list(point) for point in self.box]
+        if not self.merged_from:
+            self.merged_from = [self.id]
+        if not self.raw_text and self.source_text:
+            self.raw_text = self.source_text
 
     def as_review_row(self) -> list[Any]:
         return [
             self.id,
             self.enabled,
+            self.locked,
+            self.direction,
             self.source_text,
             self.translated_text,
+            self.font_size if self.font_size is not None else "",
+            self.font_color,
+            self.stroke_color,
             self.confidence if self.confidence is not None else "",
             self.notes,
         ]
@@ -120,3 +168,4 @@ class ImageJobResult(BaseModel):
     overlay_path: str = ""
     cleaned_path: str = ""
     final_path: str = ""
+    debug_paths: dict[str, str] = Field(default_factory=dict)

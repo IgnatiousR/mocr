@@ -4,6 +4,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+from .config import default_hardware_acceleration, default_llama_gpu_layers
 from .model_manager import resolve_project_path, translation_missing_message
 
 
@@ -64,6 +65,17 @@ def validate_sugoi_model_path(model_path: str) -> Path:
     return resolved_path
 
 
+def validate_ctranslate2_spm_model_path(model_path: str, label: str = "CTranslate2") -> Path:
+    resolved_path = resolve_project_path(model_path)
+    if not resolved_path.exists():
+        raise RuntimeError(translation_missing_message(resolved_path))
+    if not resolved_path.is_dir():
+        raise RuntimeError(f"{label} requires a CTranslate2 model directory. Current path is: {resolved_path}.")
+    if not (resolved_path / "model.bin").exists():
+        raise RuntimeError(f"{label} model directory is incomplete: {resolved_path}. Missing: model.bin.")
+    return resolved_path
+
+
 def validate_fugumt_model_path(model_path: str) -> Path:
     resolved_path = resolve_project_path(model_path)
     if not resolved_path.exists():
@@ -90,7 +102,7 @@ def get_llama(model_path: str, threads: int, context: int):
         model_path=str(resolved_path),
         n_ctx=context,
         n_threads=threads,
-        n_gpu_layers=0,
+        n_gpu_layers=default_llama_gpu_layers(),
         verbose=False,
     )
 
@@ -107,7 +119,10 @@ def get_sugoi(model_path: str):
     spm_path = resolved_path / "spm"
     source_spm = spm_path / "spm.ja.nopretok.model"
     target_spm = spm_path / "spm.en.nopretok.model"
-    translator = ctranslate2.Translator(str(resolved_path), device="cpu")
+    
+    hardware = default_hardware_acceleration()
+    device = "auto" if hardware in ("intel_xpu", "vulkan") else "cpu"
+    translator = ctranslate2.Translator(str(resolved_path), device=device)
     source_tokenizer = sentencepiece.SentencePieceProcessor(str(source_spm))
     target_tokenizer = sentencepiece.SentencePieceProcessor(str(target_spm))
     return translator, source_tokenizer, target_tokenizer
@@ -121,9 +136,27 @@ def get_fugumt(model_path: str):
     except Exception as exc:  # pragma: no cover - depends on optional install
         raise RuntimeError("transformers and torch are not installed.") from exc
 
+    hardware = default_hardware_acceleration()
+    device = "xpu" if hardware == "intel_xpu" else "cpu"
+    if device == "xpu":
+        import intel_extension_for_pytorch as ipex
+
     tokenizer = AutoTokenizer.from_pretrained(str(resolved_path), local_files_only=True)
     model = AutoModelForSeq2SeqLM.from_pretrained(str(resolved_path), local_files_only=True)
-    model.to("cpu")
+    model.to(device)
+    model.eval()
+    return tokenizer, model
+
+
+@lru_cache(maxsize=2)
+def get_transformers_seq2seq(model_path: str):
+    resolved_path = validate_fugumt_model_path(model_path)
+    try:
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+    except Exception as exc:  # pragma: no cover - depends on optional install
+        raise RuntimeError("transformers and torch are not installed.") from exc
+    tokenizer = AutoTokenizer.from_pretrained(str(resolved_path), local_files_only=True)
+    model = AutoModelForSeq2SeqLM.from_pretrained(str(resolved_path), local_files_only=True)
     model.eval()
     return tokenizer, model
 
@@ -171,6 +204,23 @@ def translate_japanese_to_english_fugumt(
     return " ".join(part for part in translated if part).strip()
 
 
+def translate_japanese_to_english_transformers(
+    text: str,
+    model_path: str,
+    max_tokens: int = 256,
+) -> str:
+    chunks = split_for_translation(text)
+    if not chunks:
+        return ""
+    tokenizer, model = get_transformers_seq2seq(model_path)
+    translated: list[str] = []
+    for chunk in chunks:
+        inputs = tokenizer(chunk, return_tensors="pt", truncation=True)
+        output_ids = model.generate(**inputs, max_new_tokens=max_tokens, num_beams=4)
+        translated.append(tokenizer.decode(output_ids[0], skip_special_tokens=True).strip())
+    return " ".join(part for part in translated if part).strip()
+
+
 def translate_japanese_to_english(
     text: str,
     model_path: str,
@@ -184,6 +234,10 @@ def translate_japanese_to_english(
         return translate_japanese_to_english_sugoi(text, model_path, max_tokens=max_tokens)
     if normalized_backend in {"fugu", "fugu-mt", "fugumt", "fugumt-ja-en", "transformers"}:
         return translate_japanese_to_english_fugumt(text, model_path, max_tokens=max_tokens)
+    if normalized_backend in {"nllb", "m2m100", "mbart"}:
+        return translate_japanese_to_english_transformers(text, model_path, max_tokens=max_tokens)
+    if normalized_backend in {"jparacrawl", "jparacrawl-big"}:
+        return translate_japanese_to_english_sugoi(text, model_path, max_tokens=max_tokens)
 
     chunks = split_for_translation(text)
     if not chunks:

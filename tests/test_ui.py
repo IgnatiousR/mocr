@@ -5,6 +5,43 @@ from manga_translator.models import AppSettings, ImageJobResult, TextRegion
 from manga_translator.ui import build_app, ram_usage_markdown, installed_font_choices
 
 
+def _batch_args(tmp_path):
+    return [
+        "quality",
+        "ctd",
+        1,
+        True,
+        True,
+        6,
+        3,
+        "",
+        "",
+        "auto",
+        "#181818",
+        "#ffffff",
+        1,
+        "sugoi",
+        "",
+        "",
+        "",
+        "",
+        "",
+        str(tmp_path),
+        1,
+        512,
+        64,
+        4,
+        2,
+        18,
+        True,
+        6,
+        0,
+        True,
+        "PNG",
+        False,
+    ]
+
+
 def test_build_app_with_dynamic_thread_slider(monkeypatch):
     monkeypatch.setattr("manga_translator.config.os.cpu_count", lambda: 4)
 
@@ -105,9 +142,9 @@ def test_single_file_batch_returns_translated_image(monkeypatch, tmp_path):
     monkeypatch.setattr(ui.PIPELINE, "compose_image", lambda path, settings, regions: composed)
     monkeypatch.setattr(ui, "make_zip", lambda paths, output_dir: (_ for _ in ()).throw(AssertionError("should not zip one file")))
 
-    result = ui._batch_auto([str(source)], True, "sugoi", "", "", "", "", "", str(tmp_path), 1, 512, 64, 4, 2, 18, True, 6, 0, True, "PNG", False)
+    result = ui._batch_auto([str(source)], True, *_batch_args(tmp_path))
 
-    assert len(result) == 10
+    assert len(result) == 11
     assert result[1] == [region.as_review_row()]
     assert result[2] == composed.original_path
     assert result[3] == composed.overlay_path
@@ -115,8 +152,9 @@ def test_single_file_batch_returns_translated_image(monkeypatch, tmp_path):
     assert result[5] == composed.final_path
     assert result[6] == composed.final_path
     assert result[7] == str(translated)
-    assert result[8] == [(str(translated), "page_translated.png")]
-    status = result[9]
+    assert result[8] == []
+    assert result[9] == [(str(translated), "page_translated.png")]
+    status = result[10]
     assert "OK: page.png" in status
 
 
@@ -143,12 +181,13 @@ def test_multi_file_batch_returns_zip(monkeypatch, tmp_path):
     monkeypatch.setattr(ui.PIPELINE, "compose_image", fake_compose)
     monkeypatch.setattr(ui, "make_zip", lambda paths, output_dir: str(zip_path))
 
-    result = ui._batch_auto([str(path) for path in sources], True, "sugoi", "", "", "", "", "", str(tmp_path), 1, 512, 64, 4, 2, 18, True, 6, 0, True, "PNG", False)
+    result = ui._batch_auto([str(path) for path in sources], True, *_batch_args(tmp_path))
 
-    assert len(result) == 10
+    assert len(result) == 11
     assert result[5] == final_paths[1]
     assert result[7] == str(zip_path)
-    assert result[8] == [(final_paths[0], "a_translated.png"), (final_paths[1], "b_translated.png")]
-    status = result[9]
+    assert result[8] == []
+    assert result[9] == [(final_paths[0], "a_translated.png"), (final_paths[1], "b_translated.png")]
+    status = result[10]
     assert "OK: a.png" in status
     assert "OK: b.png" in status

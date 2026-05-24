@@ -20,6 +20,12 @@ DEFAULT_SUGOI_REPO = "entai2965/sugoi-v4-ja-en-ctranslate2"
 DEFAULT_SUGOI_DIR = "sugoi-v4-ja-en-ctranslate2"
 DEFAULT_FUGUMT_REPO = "staka/fugumt-ja-en"
 DEFAULT_FUGUMT_DIR = "fugumt-ja-en"
+DEFAULT_JPARACRAWL_BIG_REPO = "zyddnys/jparacrawl-big-ja-en-ctranslate2"
+DEFAULT_JPARACRAWL_BIG_DIR = "jparacrawl-big-ja-en-ctranslate2"
+DEFAULT_NLLB_REPO = "facebook/nllb-200-distilled-600M"
+DEFAULT_NLLB_DIR = "nllb-200-distilled-600M"
+DEFAULT_M2M100_REPO = "facebook/m2m100_418M"
+DEFAULT_M2M100_DIR = "m2m100_418M"
 DEFAULT_REALESRGAN_FILE = "RealESRGAN_x4plus_anime_6B.pth"
 DEFAULT_REALESRGAN_URL = (
     "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/"
@@ -85,6 +91,43 @@ TRANSLATION_PRESETS: tuple[TranslationPreset, ...] = (
         path=f"models/translation/{DEFAULT_FUGUMT_DIR}",
         repo=DEFAULT_FUGUMT_REPO,
     ),
+    TranslationPreset(
+        id="jparacrawl-big",
+        label="JParaCrawl Big CTranslate2",
+        backend="jparacrawl",
+        path=f"models/translation/{DEFAULT_JPARACRAWL_BIG_DIR}",
+        repo=DEFAULT_JPARACRAWL_BIG_REPO,
+    ),
+    TranslationPreset(
+        id="nllb-600m",
+        label="NLLB 600M Transformers",
+        backend="nllb",
+        path=f"models/translation/{DEFAULT_NLLB_DIR}",
+        repo=DEFAULT_NLLB_REPO,
+    ),
+    TranslationPreset(
+        id="m2m100-418m",
+        label="M2M100 418M Transformers",
+        backend="m2m100",
+        path=f"models/translation/{DEFAULT_M2M100_DIR}",
+        repo=DEFAULT_M2M100_REPO,
+    ),
+    TranslationPreset(
+        id="sakura-1.5b-gguf",
+        label="Sakura 1.5B Qwen2.5 GGUF",
+        backend="llama",
+        path="models/translation/sakura-1.5b-qwen2.5-v1.0-iq4_xs.gguf",
+        repo="SakuraLLM/Sakura-1.5B-Qwen2.5-v1.0-GGUF",
+        file="sakura-1.5b-qwen2.5-v1.0-iq4_xs.gguf",
+    ),
+    TranslationPreset(
+        id="hunyuan-mt-7b-gguf",
+        label="Hunyuan-MT 7B GGUF",
+        backend="llama",
+        path="models/translation/hunyuan-mt-7b-q4_k_m.gguf",
+        repo="bartowski/Hunyuan-MT-7B-GGUF",
+        file="Hunyuan-MT-7B-Q4_K_M.gguf",
+    ),
 )
 TRANSLATION_PRESETS_BY_ID = {preset.id: preset for preset in TRANSLATION_PRESETS}
 
@@ -129,6 +172,9 @@ def _normalize_backend(backend: str | None = None) -> str:
         "fugumt-ja-en": "fugumt",
         "huggingface": "fugumt",
         "transformers": "fugumt",
+        "jparacrawl-big": "jparacrawl",
+        "nllb-600m": "nllb",
+        "m2m100-418m": "m2m100",
     }
     return aliases.get(value, value)
 
@@ -163,6 +209,12 @@ def default_translation_model_path(backend: str | None = None) -> Path:
         return TRANSLATION_DIR / DEFAULT_SUGOI_DIR
     if backend == "fugumt":
         return TRANSLATION_DIR / DEFAULT_FUGUMT_DIR
+    if backend == "jparacrawl":
+        return TRANSLATION_DIR / DEFAULT_JPARACRAWL_BIG_DIR
+    if backend == "nllb":
+        return TRANSLATION_DIR / DEFAULT_NLLB_DIR
+    if backend == "m2m100":
+        return TRANSLATION_DIR / DEFAULT_M2M100_DIR
     return TRANSLATION_DIR / get_translation_model_file()
 
 
@@ -188,6 +240,12 @@ def get_translation_model_repo(backend: str | None = None) -> str:
         default_repo = DEFAULT_SUGOI_REPO
     elif backend == "fugumt":
         default_repo = DEFAULT_FUGUMT_REPO
+    elif backend == "jparacrawl":
+        default_repo = DEFAULT_JPARACRAWL_BIG_REPO
+    elif backend == "nllb":
+        default_repo = DEFAULT_NLLB_REPO
+    elif backend == "m2m100":
+        default_repo = DEFAULT_M2M100_REPO
     else:
         default_repo = DEFAULT_TRANSLATION_REPO
     configured = get_config_value("TRANSLATION_MODEL_REPO", "")
@@ -245,7 +303,7 @@ def download_translation_model(backend: str | None = None, destination: str | Pa
     destination = resolve_project_path(destination) if destination else default_translation_model_path(backend)
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if backend in {"ctranslate2", "sugoi", "fugumt"}:
+        if backend in {"ctranslate2", "sugoi", "fugumt", "jparacrawl", "nllb", "m2m100"}:
             try:
                 from huggingface_hub import snapshot_download
             except Exception as exc:  # pragma: no cover - depends on optional install
@@ -261,7 +319,7 @@ def download_translation_model(backend: str | None = None, destination: str | Pa
             if cached_path.resolve() != destination.resolve():
                 shutil.copy2(cached_path, destination)
     except Exception as exc:
-        model_ref = repo_id if backend in {"ctranslate2", "sugoi", "fugumt"} else f"{repo_id}/{get_translation_model_file()}"
+        model_ref = repo_id if backend in {"ctranslate2", "sugoi", "fugumt", "jparacrawl", "nllb", "m2m100"} else f"{repo_id}/{get_translation_model_file()}"
         raise ModelDownloadError(f"Could not download translation model {model_ref}: {exc}") from exc
     return destination
 
