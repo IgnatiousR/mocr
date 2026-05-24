@@ -23,6 +23,30 @@ def _output_stem(source: Path) -> str:
     return f"{source.stem}_{short_hash(source)}"
 
 
+def _translated_output_stem(source: Path) -> str:
+    return f"{source.stem}_translated"
+
+
+def _save_output(image, settings: AppSettings, source: Path, category: str, name: str) -> str:
+    return save_output_image(
+        image,
+        settings.output_dir,
+        category,
+        f"{_output_stem(source)}_{name}",
+        suffix=_suffix(settings),
+    )
+
+
+def _save_translated_output(image, settings: AppSettings, source: Path) -> str:
+    return save_output_image(
+        image,
+        settings.output_dir,
+        "final",
+        _translated_output_stem(source),
+        suffix=_suffix(settings),
+    )
+
+
 class MangaTranslationPipeline:
     def __init__(self) -> None:
         self.region_cache: dict[str, list[TextRegion]] = {}
@@ -30,47 +54,17 @@ class MangaTranslationPipeline:
     def analyze_image(self, path: str | Path, settings: AppSettings, run_translation: bool = True) -> ImageJobResult:
         source = Path(path)
         image = open_image(source)
-        cache_key = f"{image_hash(source)}:{settings.mask_padding}"
-        regions = [region.model_copy(deep=True) for region in self.region_cache.get(cache_key, [])]
-        if not regions:
-            regions = detect_text_regions(image)
-            for region in regions:
-                crop = crop_region(image, region)
-                try:
-                    region.source_text = recognize_japanese(crop)
-                except Exception as exc:
-                    region.notes = str(exc)
-            self.region_cache[cache_key] = [region.model_copy(deep=True) for region in regions]
+        regions = self._detect_or_cached_regions(source, image, settings)
+        if run_translation:
+            self._translate_regions(regions, settings)
 
-        if run_translation and not settings.model_file:
-            for region in regions:
-                if region.source_text:
-                    region.notes = translation_missing_message(settings.translation_model_path)
-        elif run_translation and settings.model_file:
-            for region in regions:
-                if region.source_text and not region.translated_text:
-                    try:
-                        region.translated_text = translate_japanese_to_english(
-                            region.source_text,
-                            str(settings.model_file),
-                            backend=settings.translation_backend,
-                            threads=settings.llama_threads,
-                            context=settings.llama_context,
-                            max_tokens=settings.max_translation_tokens,
-                        )
-                    except Exception as exc:
-                        region.notes = str(exc)
         overlay = draw_region_overlay(image, regions)
-        suffix = _suffix(settings)
-        stem = _output_stem(source)
-        overlay_path = save_output_image(overlay, settings.output_dir, "overlays", f"{stem}_overlay", suffix=suffix)
-        original_path = save_output_image(image, settings.output_dir, "originals", f"{stem}_original", suffix=suffix)
         return ImageJobResult(
             image_name=source.name,
             regions=regions,
             status="analyzed",
-            original_path=original_path,
-            overlay_path=overlay_path,
+            original_path=_save_output(image, settings, source, "originals", "original"),
+            overlay_path=_save_output(overlay, settings, source, "overlays", "overlay"),
         )
 
     def compose_image(
@@ -81,32 +75,77 @@ class MangaTranslationPipeline:
     ) -> ImageJobResult:
         source = Path(path)
         image = open_image(source)
-        cleaned = inpaint_text(image, regions, padding=settings.mask_padding, radius=settings.inpaint_radius)
+        cleaned = inpaint_text(
+            image,
+            regions,
+            padding=settings.mask_padding,
+            radius=settings.inpaint_radius,
+            backend=settings.inpainter_backend,
+            model_path=settings.inpaint_model_path,
+        )
         final = render_translations(
             cleaned,
             regions,
             font_path=settings.font_path,
             font_size=settings.font_size,
             auto_font_size=settings.auto_font_size,
+            text_box_gap=settings.text_box_gap,
+            line_gap=settings.line_gap,
+            overflow_text=settings.overflow_text,
         )
         if settings.enable_upscale:
             if not settings.realesrgan_model_file:
                 raise RuntimeError(realesrgan_missing_message(settings.realesrgan_model_path))
             final = upscale_anime(final, model_path=str(settings.realesrgan_model_file))
 
-        suffix = _suffix(settings)
-        stem = _output_stem(source)
-        cleaned_path = save_output_image(cleaned, settings.output_dir, "cleaned", f"{stem}_cleaned", suffix=suffix)
-        final_path = save_output_image(final, settings.output_dir, "final", f"{stem}_translated", suffix=suffix)
         return ImageJobResult(
             image_name=source.name,
             regions=regions,
             status="composed",
-            original_path=save_output_image(image, settings.output_dir, "originals", f"{stem}_original", suffix=suffix),
-            overlay_path=save_output_image(draw_region_overlay(image, regions), settings.output_dir, "overlays", f"{stem}_overlay", suffix=suffix),
-            cleaned_path=cleaned_path,
-            final_path=final_path,
+            original_path=_save_output(image, settings, source, "originals", "original"),
+            overlay_path=_save_output(draw_region_overlay(image, regions), settings, source, "overlays", "overlay"),
+            cleaned_path=_save_output(cleaned, settings, source, "cleaned", "cleaned"),
+            final_path=_save_translated_output(final, settings, source),
         )
+
+    def _detect_or_cached_regions(self, source: Path, image, settings: AppSettings) -> list[TextRegion]:
+        cache_key = f"{image_hash(source)}:{settings.mask_padding}"
+        cached_regions = self.region_cache.get(cache_key, [])
+        regions = [region.model_copy(deep=True) for region in cached_regions]
+        if regions:
+            return regions
+
+        regions = detect_text_regions(image)
+        for region in regions:
+            crop = crop_region(image, region)
+            try:
+                region.source_text = recognize_japanese(crop)
+            except Exception as exc:
+                region.notes = str(exc)
+        self.region_cache[cache_key] = [region.model_copy(deep=True) for region in regions]
+        return regions
+
+    def _translate_regions(self, regions: list[TextRegion], settings: AppSettings) -> None:
+        if not settings.model_file:
+            for region in regions:
+                if region.source_text:
+                    region.notes = translation_missing_message(settings.translation_model_path)
+            return
+
+        for region in regions:
+            if not region.source_text or region.translated_text:
+                continue
+            try:
+                region.translated_text = translate_japanese_to_english(
+                    region.source_text,
+                    str(settings.model_file),
+                    backend=settings.translation_backend,
+                    threads=settings.llama_threads,
+                    context=settings.llama_context,
+                    max_tokens=settings.max_translation_tokens,
+                )
+            except Exception as exc:
+                region.notes = str(exc)
 
 
 def rows_to_regions(rows: list[list[object]], base_regions: list[TextRegion]) -> list[TextRegion]:

@@ -14,9 +14,34 @@ A local Python/Gradio app for translating Japanese manga or image text on a norm
 
 Supported input formats: PNG, JPG, JPEG, WEBP.
 
+## Before You Start
+
+Check these tools before installing packages. On Windows, run the commands in PowerShell.
+
+| Tool | Check | Required version | Download |
+| --- | --- | --- | --- |
+| Python | `python --version` | 3.10 or 3.11 | [Python downloads](https://www.python.org/downloads/) or [Windows Store Python](https://apps.microsoft.com/search?query=python) |
+| pip | `python -m pip --version` | Bundled with Python | Reinstall or repair Python from [python.org](https://www.python.org/downloads/) |
+| Git | `git --version` | Any current version | [Git for Windows](https://git-scm.com/download/win) |
+| PowerShell | `$PSVersionTable.PSVersion` | Windows PowerShell 5+ or PowerShell 7+ | [PowerShell 7](https://github.com/PowerShell/PowerShell/releases) |
+| Microsoft C++ Build Tools | `where cl` | Only needed if `llama-cpp-python` builds from source | [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) |
+
+Python 3.12 is not supported by this project yet. If `python --version` shows Python 3.12 or newer, install Python 3.11 and use the Python Launcher commands:
+
+```powershell
+py -3.11 --version
+py -3.11 -m venv .venv
+```
+
+Recommended system resources:
+
+- 16 GB RAM for local OCR and translation.
+- 5-10 GB free disk space for packages, model files, and outputs.
+- CPU-only install is supported; a GPU is not required.
+
 ## Recommended Setup Path
 
-Use Python 3.10 or 3.11. Python 3.11 is recommended on Windows.
+Use Python 3.10 or 3.11. Python 3.11 is recommended on Windows. If you have not checked your tools yet, start with [Before You Start](#before-you-start).
 
 Open PowerShell in the project folder. For example, replace `<project-folder>` with the path where you cloned or downloaded this repository:
 
@@ -110,12 +135,15 @@ TRANSLATION_BACKEND=llama
 TRANSLATION_MODEL_PATH=models/translation/gemma-2-2b-jpn-it-translate-Q4_K_M.gguf
 FONT_PATH=C:/Windows/Fonts/arial.ttf
 REALESRGAN_MODEL_PATH=models/upscale/RealESRGAN_x4plus_anime_6B.pth
+INPAINTER_BACKEND=opencv-telea
+INPAINT_MODEL_PATH=
 OUTPUT_DIR=outputs
 LLAMA_THREADS=4
 LLAMA_CONTEXT=2048
 TRANSLATION_MODEL_REPO=webbigdata/gemma-2-2b-jpn-it-translate-gguf
 TRANSLATION_MODEL_FILE=gemma-2-2b-jpn-it-translate-Q4_K_M.gguf
 REALESRGAN_MODEL_URL=https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth
+INPAINT_MODEL_URL=
 ```
 
 UI fields override `.env` values. If a UI field is empty, the app uses `.env`, then built-in defaults.
@@ -127,12 +155,13 @@ The app uses project-local model folders:
 ```text
 models/
   translation/
+  inpaint/
   upscale/
 ```
 
 The app never silently downloads large model files during image processing. If a model is missing, the app tells you to download it first.
 
-OCR libraries such as PaddleOCR and Manga OCR may still use their own package/user cache for internal OCR weights. The app-controlled LLM GGUF and Real-ESRGAN weights live in `models/`.
+OCR libraries such as PaddleOCR and Manga OCR may still use their own package/user cache for internal OCR weights. The app-controlled LLM GGUF, neural inpainter, and Real-ESRGAN weights live in `models/`.
 
 ## Translation Model
 
@@ -140,6 +169,7 @@ The app supports two local translation backends:
 
 - `llama`: loads a local `.gguf` model through `llama-cpp-python`.
 - `sugoi`: loads the Sugoi V4 Japanese-to-English CTranslate2 model directory.
+- `fugumt`: loads Fugu-MT Japanese-to-English through Hugging Face Transformers.
 
 ### GGUF Models
 
@@ -212,6 +242,72 @@ If auto-translate is enabled and the model is missing, the app reports:
 ```text
 Download translation model first: models/translation/...
 ```
+
+### Fugu-MT Transformers
+
+Fugu-MT is a Japanese-to-English Transformers model. It is a directory-style Hugging Face model, not a GGUF file.
+
+Recommended Fugu-MT repo:
+
+```text
+staka/fugumt-ja-en
+```
+
+Use these `.env` values:
+
+```text
+TRANSLATION_BACKEND=fugumt
+TRANSLATION_MODEL_REPO=staka/fugumt-ja-en
+TRANSLATION_MODEL_FILE=
+TRANSLATION_MODEL_PATH=models/translation/fugumt-ja-en
+```
+
+Install translation packages first:
+
+```powershell
+python -m pip install -r requirements-translate.txt
+```
+
+Download with:
+
+```powershell
+python scripts\download_models.py --translation
+```
+
+## Inpainter Models
+
+The default inpainter is `opencv-telea`. It needs no model file and is the best CPU-safe default. You can also choose `opencv-ns` for OpenCV Navier-Stokes inpainting.
+
+Optional neural inpainters:
+
+| Backend | File | Notes |
+| --- | --- | --- |
+| `migan` | `models/inpaint/migan_traced.pt` | Recommended lightweight neural option for CPU use. |
+| `anime-lama` | `models/inpaint/anime-manga-big-lama.pt` | Recommended manga-oriented quality option. |
+| `big-lama` | `models/inpaint/big-lama.pt` | General-purpose LaMa; heavier than MI-GAN. |
+
+Install neural inpainter packages first:
+
+```powershell
+python -m pip install -r requirements-inpaint.txt
+```
+
+Set this in `.env` or the UI:
+
+```text
+INPAINTER_BACKEND=migan
+INPAINT_MODEL_PATH=models/inpaint/migan_traced.pt
+```
+
+Download the selected neural inpainter with:
+
+```powershell
+python scripts\download_models.py --inpaint --inpainter-backend migan
+```
+
+Or use the `Download inpainter model` button in the UI. The app does not auto-download inpainter models during image processing.
+
+AOT-GAN and the original `msxie92/MangaInpainting` model are not regular app options because their setup/runtime profile is not a good fit for this CPU-first 16 GB RAM target.
 
 ## Real-ESRGAN Model
 

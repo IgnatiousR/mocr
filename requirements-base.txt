@@ -6,4 +6,6 @@ pydantic>=2.7,<2.11
 pillow>=10.0
 numpy>=1.26
 opencv-python>=4.9
+psutil>=5.9
 rich>=13.7
+onnxruntime>=1.17

@@ -7,7 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import get_config_value
-from .model_manager import default_realesrgan_model_path, default_translation_model_path, get_translation_backend, resolve_project_path
+from .model_manager import (
+    NEURAL_INPAINTERS,
+    default_inpaint_model_path,
+    default_realesrgan_model_path,
+    default_translation_model_path,
+    get_inpainter_backend,
+    get_translation_backend,
+    normalize_inpainter_backend,
+    resolve_project_path,
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +37,52 @@ def module_available(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
 
+def pip_install_command(requirements_file: str) -> str:
+    return f'"{sys.executable}" -m pip install -r {requirements_file}'
+
+
+def missing_modules(modules: list[str]) -> list[str]:
+    return [module for module in modules if not module_available(module)]
+
+
+def translation_dependency_modules(translation_backend: str) -> list[str]:
+    if translation_backend in {"ctranslate2", "sugoi"}:
+        return ["ctranslate2", "sentencepiece"]
+    if translation_backend in {"fugumt", "fugu", "fugu-mt", "fugumt-ja-en", "transformers"}:
+        return ["transformers", "torch"]
+    return ["llama_cpp"]
+
+
+def missing_translation_dependencies(translation_backend: str) -> list[str]:
+    return missing_modules(translation_dependency_modules(translation_backend))
+
+
+def missing_upscale_dependencies() -> list[str]:
+    return missing_modules(["realesrgan", "basicsr"])
+
+
+def missing_inpaint_dependencies(inpainter_backend: str) -> list[str]:
+    if normalize_inpainter_backend(inpainter_backend) in NEURAL_INPAINTERS:
+        return missing_modules(["torch"])
+    return []
+
+
+def dependency_status_message(name: str, missing: list[str], requirements_file: str) -> str:
+    if not missing:
+        return ""
+    return f"Missing packages for {name}: {', '.join(missing)}. Run: {pip_install_command(requirements_file)}"
+
+
+def _package_status(name: str, modules: list[str], missing_status: str, action: str) -> CheckResult:
+    missing = missing_modules(modules)
+    return CheckResult(
+        name,
+        "OK" if not missing else missing_status,
+        "installed" if not missing else ", ".join(missing),
+        "" if not missing else action,
+    )
+
+
 def _path_status(name: str, value: str, required: bool, action: str) -> CheckResult:
     if not value:
         return CheckResult(name, "Missing" if required else "Optional", "path is not configured", action)
@@ -37,64 +92,61 @@ def _path_status(name: str, value: str, required: bool, action: str) -> CheckRes
     return CheckResult(name, "Missing" if required else "Optional", f"path does not exist: {path}", action)
 
 
+def _python_check() -> CheckResult:
+    version = sys.version_info
+    if (version.major, version.minor) in {(3, 10), (3, 11)}:
+        return CheckResult("Python", "OK", sys.version.split()[0])
+    return CheckResult("Python", "Missing", sys.version.split()[0], "Use Python 3.10 or 3.11.")
+
+
+def _translation_package_check(translation_backend: str) -> CheckResult:
+    modules = translation_dependency_modules(translation_backend)
+    missing = missing_modules(modules)
+
+    return CheckResult(
+        "Translation package",
+        "OK" if not missing else "Optional",
+        "installed" if not missing else ", ".join(missing),
+        "" if not missing else pip_install_command("requirements-translate.txt"),
+    )
+
+
 def collect_setup_checks(
     translation_backend: str | None = None,
     translation_model_path: str | None = None,
     font_path: str | None = None,
     realesrgan_model_path: str | None = None,
+    inpainter_backend: str | None = None,
+    inpaint_model_path: str | None = None,
     output_dir: str | None = None,
 ) -> list[CheckResult]:
     translation_backend = (translation_backend if translation_backend is not None else get_translation_backend()).strip().lower()
     translation_model_path = translation_model_path if translation_model_path is not None else get_config_value("TRANSLATION_MODEL_PATH") or str(default_translation_model_path(translation_backend))
     font_path = font_path if font_path is not None else get_config_value("FONT_PATH")
     realesrgan_model_path = realesrgan_model_path if realesrgan_model_path is not None else get_config_value("REALESRGAN_MODEL_PATH") or str(default_realesrgan_model_path())
+    inpainter_backend = normalize_inpainter_backend(inpainter_backend if inpainter_backend is not None else get_inpainter_backend())
+    inpaint_model_path = inpaint_model_path if inpaint_model_path is not None else get_config_value("INPAINT_MODEL_PATH") or str(default_inpaint_model_path(inpainter_backend))
     output_dir = output_dir if output_dir is not None else get_config_value("OUTPUT_DIR", "outputs")
 
     checks: list[CheckResult] = []
-    version = sys.version_info
-    if (version.major, version.minor) in {(3, 10), (3, 11)}:
-        checks.append(CheckResult("Python", "OK", sys.version.split()[0]))
-    else:
-        checks.append(CheckResult("Python", "Missing", sys.version.split()[0], "Use Python 3.10 or 3.11."))
-
-    base_modules = ["gradio", "pydantic", "PIL", "numpy", "cv2", "rich"]
-    missing_base = [name for name in base_modules if not module_available(name)]
+    checks.append(_python_check())
     checks.append(
-        CheckResult(
+        _package_status(
             "Base packages",
-            "OK" if not missing_base else "Missing",
-            "installed" if not missing_base else ", ".join(missing_base),
-            "" if not missing_base else "python -m pip install -r requirements-base.txt",
+            ["gradio", "pydantic", "PIL", "numpy", "cv2", "psutil", "rich"],
+            "Missing",
+            pip_install_command("requirements-base.txt"),
         )
     )
-
-    ocr_modules = ["paddle", "paddleocr", "manga_ocr", "torch"]
-    missing_ocr = [name for name in ocr_modules if not module_available(name)]
     checks.append(
-        CheckResult(
+        _package_status(
             "OCR packages",
-            "OK" if not missing_ocr else "Missing",
-            "installed" if not missing_ocr else ", ".join(missing_ocr),
-            "" if not missing_ocr else "Install PaddlePaddle CPU, then python -m pip install -r requirements-ocr.txt",
+            ["paddle", "paddleocr", "manga_ocr", "torch"],
+            "Missing",
+            f"Install PaddlePaddle CPU, then {pip_install_command('requirements-ocr.txt')}",
         )
     )
-
-    has_llama = module_available("llama_cpp")
-    has_ctranslate2 = module_available("ctranslate2") and module_available("sentencepiece")
-    if translation_backend in {"ctranslate2", "sugoi"}:
-        translation_package_ok = has_ctranslate2
-        translation_package_detail = "ctranslate2 and sentencepiece installed" if has_ctranslate2 else "ctranslate2 or sentencepiece is not installed"
-    else:
-        translation_package_ok = has_llama
-        translation_package_detail = "llama-cpp-python installed" if has_llama else "llama-cpp-python is not installed"
-    checks.append(
-        CheckResult(
-            "Translation package",
-            "OK" if translation_package_ok else "Optional",
-            translation_package_detail,
-            "" if translation_package_ok else "python -m pip install -r requirements-translate.txt",
-        )
-    )
+    checks.append(_translation_package_check(translation_backend))
     checks.append(
         _path_status(
             "Translation model",
@@ -113,14 +165,12 @@ def collect_setup_checks(
         )
     )
 
-    upscale_modules = ["realesrgan", "basicsr"]
-    missing_upscale = [name for name in upscale_modules if not module_available(name)]
     checks.append(
-        CheckResult(
+        _package_status(
             "Upscale packages",
-            "OK" if not missing_upscale else "Optional",
-            "installed" if not missing_upscale else ", ".join(missing_upscale),
-            "" if not missing_upscale else "python -m pip install -r requirements-upscale.txt",
+            ["realesrgan", "basicsr"],
+            "Optional",
+            pip_install_command("requirements-upscale.txt"),
         )
     )
     checks.append(
@@ -131,6 +181,25 @@ def collect_setup_checks(
             action="Download it with python scripts/download_models.py --upscale or leave upscaling disabled.",
         )
     )
+
+    checks.append(CheckResult("Inpainter", "OK", inpainter_backend))
+    if inpainter_backend in NEURAL_INPAINTERS:
+        checks.append(
+            _package_status(
+                "Inpaint packages",
+                ["torch"],
+                "Optional",
+                pip_install_command("requirements-inpaint.txt"),
+            )
+        )
+        checks.append(
+            _path_status(
+                "Inpaint model",
+                inpaint_model_path or "",
+                required=False,
+                action="Download it with python scripts/download_models.py --inpaint or use the UI download button.",
+            )
+        )
 
     out_path = Path(output_dir or "outputs").expanduser()
     checks.append(CheckResult("Output directory", "OK", str(out_path), "The app will create it if needed."))
@@ -151,6 +220,8 @@ def setup_status_markdown(
     translation_model_path: str = "",
     font_path: str = "",
     realesrgan_model_path: str = "",
+    inpainter_backend: str = "",
+    inpaint_model_path: str = "",
     output_dir: str = "",
 ) -> str:
     checks = collect_setup_checks(
@@ -158,6 +229,8 @@ def setup_status_markdown(
         translation_model_path=translation_model_path or None,
         font_path=font_path or None,
         realesrgan_model_path=realesrgan_model_path or None,
+        inpainter_backend=inpainter_backend or None,
+        inpaint_model_path=inpaint_model_path or None,
         output_dir=output_dir or None,
     )
     lines = ["### Setup Status"]

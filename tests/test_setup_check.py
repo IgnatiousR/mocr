@@ -1,4 +1,4 @@
-from manga_translator.setup_check import collect_setup_checks, setup_status_markdown
+from manga_translator.setup_check import collect_setup_checks, dependency_status_message, setup_status_markdown
 
 
 def test_setup_check_reports_missing_optional_paths(tmp_path, monkeypatch):
@@ -36,3 +36,22 @@ def test_setup_status_mentions_download_models_first(tmp_path, monkeypatch):
 
     assert "python scripts/download_models.py --translation" in markdown
     assert "python scripts/download_models.py --upscale" in markdown
+
+
+def test_setup_status_mentions_neural_inpaint_model(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    markdown = setup_status_markdown(
+        inpainter_backend="migan",
+        inpaint_model_path="models/inpaint/missing.pt",
+    )
+
+    assert "Inpaint model" in markdown
+    assert "python scripts/download_models.py --inpaint" in markdown
+
+
+def test_dependency_status_message_uses_running_python():
+    message = dependency_status_message("sugoi", ["ctranslate2", "sentencepiece"], "requirements-translate.txt")
+
+    assert "Missing packages for sugoi: ctranslate2, sentencepiece" in message
+    assert "-m pip install -r requirements-translate.txt" in message

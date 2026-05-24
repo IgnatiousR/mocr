@@ -13,6 +13,7 @@ dependencies = [
     "pillow>=10.0",
     "numpy>=1.26",
     "opencv-python>=4.9",
+    "psutil>=5.9",
     "rich>=13.7",
 ]
 
@@ -28,6 +29,9 @@ translation = [
 upscale = [
     "realesrgan>=0.3.0",
     "basicsr>=1.4.2",
+]
+inpaint = [
+    "torch>=2.3",
 ]
 dev = [
     "pytest>=8.2",
