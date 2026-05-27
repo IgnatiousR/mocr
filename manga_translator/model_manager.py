@@ -128,6 +128,20 @@ TRANSLATION_PRESETS: tuple[TranslationPreset, ...] = (
         repo="bartowski/Hunyuan-MT-7B-GGUF",
         file="Hunyuan-MT-7B-Q4_K_M.gguf",
     ),
+    TranslationPreset(
+        id="gemma4-e2b-uncensored",
+        label="Gemma 4 E2B Uncensored",
+        backend="fugumt",
+        path="models/translation/gemma4-e2b-uncensored",
+        repo="HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+    ),
+    TranslationPreset(
+        id="gemma4-e4b-uncensored",
+        label="Gemma 4 E4B Uncensored",
+        backend="fugumt",
+        path="models/translation/gemma4-e4b-uncensored",
+        repo="HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+    ),
 )
 TRANSLATION_PRESETS_BY_ID = {preset.id: preset for preset in TRANSLATION_PRESETS}
 
