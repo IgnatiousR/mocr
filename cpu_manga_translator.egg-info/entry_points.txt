@@ -1,0 +1,4 @@
+[console_scripts]
+manga-translator = manga_translator.ui:main
+manga-translator-check = manga_translator.setup_check:main
+manga-translator-download-models = scripts.download_models:main

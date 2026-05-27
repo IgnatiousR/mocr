@@ -120,10 +120,90 @@ def _detect_text_regions_ctd(image: Image.Image) -> list[TextRegion]:
     return _sort_regions(regions)
 
 
+def _detect_text_regions_bubble_seg(image: Image.Image) -> list[TextRegion]:
+    try:
+        from transformers import pipeline
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError("Transformers is not installed. Install requirements-detect.txt first.") from exc
+    
+    # In a real scenario, model path would be pulled from .env / config
+    pipe = pipeline("image-segmentation", model="mayocream/speech-bubble-segmentation")
+    results = pipe(image)
+    
+    regions: list[TextRegion] = []
+    for item in results:
+        mask = np.array(item["mask"])
+        y, x = np.where(mask > 0)
+        if len(y) == 0 or len(x) == 0:
+            continue
+        x1, y1 = int(np.min(x)), int(np.min(y))
+        x2, y2 = int(np.max(x)), int(np.max(y))
+        poly = [[float(x1), float(y1)], [float(x2), float(y1)], [float(x2), float(y2)], [float(x1), float(y2)]]
+        bbox = _poly_to_bbox(poly)
+        regions.append(
+            TextRegion(
+                id=len(regions) + 1,
+                box=poly,
+                bbox=bbox,
+                polygon=poly,
+                vertical=_is_vertical(bbox),
+                confidence=float(item.get("score", 1.0)),
+            )
+        )
+    return _sort_regions(regions)
+
+
+def _detect_text_regions_ctd_hf(image: Image.Image) -> list[TextRegion]:
+    try:
+        from transformers import pipeline
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError("Transformers is not installed. Install requirements-detect.txt first.") from exc
+        
+    pipe = pipeline("object-detection", model="ogkalu/comic-text-and-bubble-detector")
+    results = pipe(image)
+    
+    regions: list[TextRegion] = []
+    for item in results:
+        # Depending on the model, label might be "text" or "speech_bubble". We capture all for now.
+        box = item.get("box", {})
+        if not box:
+            continue
+        x1, y1, x2, y2 = box.get("xmin", 0), box.get("ymin", 0), box.get("xmax", 0), box.get("ymax", 0)
+        poly = [[float(x1), float(y1)], [float(x2), float(y1)], [float(x2), float(y2)], [float(x1), float(y2)]]
+        bbox = _poly_to_bbox(poly)
+        regions.append(
+            TextRegion(
+                id=len(regions) + 1,
+                box=poly,
+                bbox=bbox,
+                polygon=poly,
+                vertical=_is_vertical(bbox),
+                confidence=float(item.get("score", 1.0)),
+            )
+        )
+    return _sort_regions(regions)
+
+
 def detect_text_regions(image: Image.Image, backend: str = "paddle") -> tuple[list[TextRegion], list[str]]:
     backend = (backend or "paddle").strip().lower()
     notes: list[str] = []
-    if backend in {"ctd", "quality"}:
+    if backend == "bubble_seg":
+        try:
+            regions = _detect_text_regions_bubble_seg(image)
+            for idx, region in enumerate(regions, start=1):
+                region.id = idx
+            return regions, notes
+        except Exception as exc:
+            notes.append(str(exc))
+    elif backend == "ctd_hf":
+        try:
+            regions = _detect_text_regions_ctd_hf(image)
+            for idx, region in enumerate(regions, start=1):
+                region.id = idx
+            return regions, notes
+        except Exception as exc:
+            notes.append(str(exc))
+    elif backend in {"ctd", "quality"}:
         try:
             regions = _detect_text_regions_ctd(image)
             for idx, region in enumerate(regions, start=1):

@@ -1,3 +1,37 @@
+Metadata-Version: 2.4
+Name: cpu-manga-translator
+Version: 0.1.0
+Summary: CPU-first local manga/image translation web app.
+Requires-Python: <3.12,>=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: gradio<5,>=4.44
+Requires-Dist: huggingface-hub<1.0,>=0.19.3
+Requires-Dist: fastapi<0.116,>=0.112
+Requires-Dist: starlette<0.39,>=0.37
+Requires-Dist: pydantic<2.11,>=2.7
+Requires-Dist: pillow>=10.0
+Requires-Dist: numpy>=1.26
+Requires-Dist: opencv-python>=4.9
+Requires-Dist: psutil>=5.9
+Requires-Dist: rich>=13.7
+Provides-Extra: ocr
+Requires-Dist: paddleocr>=3.0; extra == "ocr"
+Requires-Dist: manga-ocr>=0.1.14; extra == "ocr"
+Requires-Dist: torch>=2.3; extra == "ocr"
+Provides-Extra: detection
+Requires-Dist: transformers>=4.38; extra == "detection"
+Requires-Dist: torchvision>=0.18; extra == "detection"
+Requires-Dist: ultralytics>=8.0; extra == "detection"
+Provides-Extra: translation
+Requires-Dist: llama-cpp-python>=0.2.90; extra == "translation"
+Provides-Extra: upscale
+Requires-Dist: realesrgan>=0.3.0; extra == "upscale"
+Requires-Dist: basicsr>=1.4.2; extra == "upscale"
+Provides-Extra: inpaint
+Requires-Dist: torch>=2.3; extra == "inpaint"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2; extra == "dev"
+
 # CPU-First Manga Image Translator
 
 A local Python/Gradio app for translating Japanese manga or image text on a normal laptop. It is designed for CPU-first use with about 16 GB RAM. After models are installed, processing stays local.

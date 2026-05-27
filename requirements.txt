@@ -3,3 +3,4 @@
 -r requirements-translate.txt
 -r requirements-upscale.txt
 -r requirements-inpaint.txt
+-r requirements-detect.txt

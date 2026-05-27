@@ -939,7 +939,7 @@ def _build_sidebar(defaults: AppSettings) -> dict[str, object]:
         with gr.Accordion("Models", open=True):
             processing_profile = gr.Dropdown(PROFILE_CHOICES, value=defaults.processing_profile, label="Processing profile")
             detector_backend = gr.Dropdown(
-                [("Auto", "auto"), ("CTD quality", "ctd"), ("PaddleOCR", "paddle")],
+                [("Auto", "auto"), ("CTD quality", "ctd"), ("PaddleOCR", "paddle"), ("Speech Bubble Seg", "bubble_seg"), ("Comic Text Detector", "ctd_hf")],
                 value=defaults.detector_backend,
                 label="Text detector",
             )

@@ -23,6 +23,11 @@ ocr = [
     "manga-ocr>=0.1.14",
     "torch>=2.3",
 ]
+detection = [
+    "transformers>=4.38",
+    "torchvision>=0.18",
+    "ultralytics>=8.0",
+]
 translation = [
     "llama-cpp-python>=0.2.90",
 ]
@@ -45,3 +50,6 @@ manga-translator-download-models = "scripts.download_models:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.setuptools]
+packages = ["manga_translator", "scripts"]
