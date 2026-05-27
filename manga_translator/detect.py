@@ -24,8 +24,18 @@ def _sort_regions(regions: list[TextRegion]) -> list[TextRegion]:
     return sorted(regions, key=lambda r: (r.bbox[1] // 32, r.bbox[0]))
 
 
-@lru_cache(maxsize=1)
-def get_paddle_ocr():
+@lru_cache(maxsize=2)
+def get_paddle_ocr(backend: str = "paddleocr vl 1.5"):
+    backend = backend.strip().lower()
+    if backend == "paddleocr vl 1.5":
+        try:
+            from paddleocr import PaddleOCRVL
+            return PaddleOCRVL()
+        except ImportError as exc:
+            raise RuntimeError(
+                "PaddleOCRVL is not installed. Please install paddleocr v3.5.0 or later with doc-parser support."
+            ) from exc
+
     try:
         from paddleocr import PaddleOCR
     except Exception as exc:  # pragma: no cover - depends on optional install
@@ -62,8 +72,8 @@ def _extract_polys_and_scores(result) -> list[tuple[list[list[float]], float | N
     return extracted
 
 
-def _detect_text_regions_paddle(image: Image.Image) -> list[TextRegion]:
-    ocr = get_paddle_ocr()
+def _detect_text_regions_paddle(image: Image.Image, backend: str = "paddleocr vl 1.5") -> list[TextRegion]:
+    ocr = get_paddle_ocr(backend)
     rgb = image.convert("RGB")
     try:
         result = ocr.predict(np.array(rgb))
@@ -92,7 +102,7 @@ def _detect_text_regions_paddle(image: Image.Image) -> list[TextRegion]:
 
 def _detect_text_regions_ctd(image: Image.Image) -> list[TextRegion]:
     try:
-        from rusty_manga_image_translator import detect_text_regions as rust_detect
+        from rusty_manga_image_translator import detect_text_regions as rust_detect  # type: ignore[import]
     except Exception as exc:  # pragma: no cover - optional quality bridge
         raise RuntimeError("CTD detector bridge is not installed; falling back to PaddleOCR.") from exc
 
@@ -211,7 +221,7 @@ def detect_text_regions(image: Image.Image, backend: str = "paddle") -> tuple[li
             return regions, notes
         except RuntimeError as exc:
             notes.append(str(exc))
-    regions = _detect_text_regions_paddle(image)
+    regions = _detect_text_regions_paddle(image, backend)
     return regions, notes
 
 

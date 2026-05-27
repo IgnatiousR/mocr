@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
 
         # Detector Backend
         self.cb_det_backend = QComboBox()
-        self.cb_det_backend.addItems(["auto", "default"])
+        self.cb_det_backend.addItems(["paddleocr vl 1.5", "paddleocr 3.5", "auto", "default"])
         self.cb_det_backend.setCurrentText(self.settings.detector_backend)
         layout.addRow("Detector Backend:", self.cb_det_backend)
 

@@ -18,7 +18,7 @@ from .model_manager import (
 
 class AppSettings(BaseModel):
     processing_profile: str = "quality"
-    detector_backend: str = "auto"
+    detector_backend: str = "paddleocr vl 1.5"
     pre_upscale_ratio: int = Field(default=1, ge=1, le=4)
     revert_pre_upscale: bool = True
     mask_refine: bool = True
@@ -98,7 +98,7 @@ class AppSettings(BaseModel):
         post_dict_path_value = kwargs.pop("post_dict_path", "")
         return cls(
             processing_profile=resolved_profile,
-            detector_backend=detector_backend or get_config_value("DETECTOR_BACKEND", "auto"),
+            detector_backend=detector_backend or get_config_value("DETECTOR_BACKEND", "paddleocr vl 1.5"),
             translation_backend=resolved_backend,
             translation_model_path=translation_model_path or str(default_translation_model_path(resolved_backend)),
             font_path=font_path or get_config_value("FONT_PATH"),
